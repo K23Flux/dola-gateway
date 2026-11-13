@@ -65,6 +65,25 @@ test("parseBundleModels refuses a bundle with no supported models", () => {
   assert.throws(() => parseBundleModels("var nothing=1"), /not found/)
 })
 
+test("the catalog merges desktop models", () => {
+  const desktopModel = {
+    id: "deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    backend: "desktop",
+    desktopId: "deepseek-v4.1-flash",
+    context: 0,
+  }
+  const desktop = {
+    current: () => ({ models: [desktopModel], available: true, app: { app: "x" }, error: "", fetchedAt: 0 }),
+  }
+  const catalog = createModelCatalog({ desktop })
+  const snap = catalog.snapshot()
+  assert.ok(snap.models.some((m) => m.id === "dola-fast" && m.backend === "web"))
+  assert.ok(snap.models.some((m) => m.id === "deepseek-v4.1-flash" && m.backend === "desktop"))
+  assert.equal(catalog.find("deepseek-v4.1-flash").backend, "desktop")
+  assert.equal(snap.desktopStatus.available, true)
+})
+
 test("the catalog caches the live list for five minutes", async () => {
   let calls = 0
   let t = 1_000

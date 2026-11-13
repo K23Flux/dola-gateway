@@ -1,40 +1,32 @@
 # Dola Gateway
 
-An unofficial, self-hosted gateway for **Dola** (`dola.com`), ByteDance's
-international build of Doubao / Cici. It serves Dola's own web endpoint as an
-**OpenAI-compatible API**, keeps a pool of signed-in accounts, rotates
-requests across them, and ships a **web dashboard** for accounts, models,
-request history, API keys and settings.
+一个非官方的、自托管的 **Dola**（`dola.com`，字节跳动国际版豆包 / Cici）网关。
+它把 Dola 网页端接口封装成 **OpenAI 兼容 API**，维护账号池并在多个账号间轮询，
+自带一个用于账号、模型、请求记录、API Key 和设置的 **Web 控制台**。
 
-The same upstream client is also packaged as a **magpie / OpenCode provider**
-in [`packages/dola`](packages/dola).
+同一套上游客户端也打包成了 **magpie / OpenCode provider**，见
+[`packages/dola`](packages/dola)。
 
-> **Unofficial. Not affiliated with ByteDance, Dola, Doubao or Cici.**
-> This project is for personal study and research only. You are responsible
-> for complying with Dola's Terms of Service and all applicable laws;
-> unofficial use can lead to rate limits, restrictions or account bans. The
-> software comes with no warranty and no liability. Do not resell, share
-> accounts, mass-register or bypass paid features. Read the full
-> [disclaimer](DISCLAIMER.md) (English / 中文).
->
-> **非官方项目**，与字节跳动、Dola、豆包无关；仅供个人学习研究，请自行遵守服务
-> 条款与法律，非官方接入可能导致限流或封号。详见 [免责声明](DISCLAIMER.md)。
+> **非官方项目，与字节跳动、Dola、豆包、Cici 无隶属、授权或赞助关系。**
+> 仅供个人学习研究。请自行遵守 Dola 服务条款和当地法律；非官方接入可能导致
+> 限流、限制或封号。软件不附带任何保证，作者不承担赔偿责任。禁止商业转售、
+> 共享账号、批量注册或绕过付费功能。完整免责声明见 [DISCLAIMER.md](DISCLAIMER.md)。
 
-## Quick start
+## 快速开始
 
 ```sh
 cd dola-hub
 node server.mjs
 ```
 
-Open `http://127.0.0.1:8788/`. The first run prints an API key and the panel
-password is `admin` until you change it in **设置**.
+打开 `http://127.0.0.1:8788/`。首次启动会打印一个 API Key；面板密码默认是
+`admin`，登录后请在「设置」里修改。
 
-1. **账号** → 添加账号: paste a Dola Cookie (works on a headless VPS), or use
-   浏览器登录 on a machine with Chrome/Edge.
-2. **API Key** → 新建 Key: give it a name and tick the models it may use.
-3. Point a client at `http://127.0.0.1:8788/v1` with that key and model
-   `dola-fast` or `dola-pro`.
+1. **账号** → 添加账号：粘贴 Dola Cookie（无图形界面的 VPS 用这个），或在有
+   Chrome/Edge 的机器上用「浏览器登录」。
+2. **API Key** → 新建 Key：填名称，勾选这个 Key 能用的模型。
+3. 客户端 Base URL 填 `http://127.0.0.1:8788/v1`，模型用 `dola-fast` 或
+   `dola-pro`。
 
 ```sh
 curl http://127.0.0.1:8788/v1/chat/completions \
@@ -43,117 +35,138 @@ curl http://127.0.0.1:8788/v1/chat/completions \
   -d '{"model":"dola-fast","messages":[{"role":"user","content":"你好"}],"stream":true}'
 ```
 
-## Features
+## 功能
 
-- **OpenAI-compatible API** — `/v1/chat/completions` and `/v1/models`, SSE
-  streaming, `reasoning_content` for Pro, text-based tool calls.
-- **Account pool** — weighted `round_robin`, `least_inflight`, `priority` and
-  `random`; sticky sessions by `user` / `X-Session-Id`; per-account
-  concurrency; exponential cooldown; 401 invalidation; failover before the
-  first streamed delta.
-- **API keys** — name, model allowlist, enable/disable and revoke; enforced
-  on `/v1/models` and on every chat request.
-- **Live model catalog** — reads Dola's public chat bundle, caches for five
-  minutes and has a manual refresh. No account cookie, no completion request,
-  no risk-control traffic; falls back to the built-in Fast/Pro list.
-- **Dashboard** — overview, accounts, models, request ledger, API keys and
-  settings; light/dark theme; panel password; login rate limiting.
-- **Local by default** — binds `127.0.0.1`, stores cookies and keys in
-  `dola-hub/data/state.json` (mode 600, git-ignored), and writes request logs
-  without prompts or cookies.
+- **OpenAI 兼容 API**：`/v1/chat/completions`、`/v1/models`，支持 SSE 流式、
+  Pro 的 `reasoning_content`、文本工具调用。
+- **账号池**：加权 `round_robin`、`least_inflight`、`priority`、`random`；
+  按 `user` / `X-Session-Id` 粘性会话；每账号并发上限；指数冷却；401 失效；
+  首个流式增量前失败自动换号。
+- **API Key**：名称、模型白名单、启停、删除；在 `/v1/models` 和每次对话请求上
+  强制生效。
+- **实时模型目录**：读取 Dola 公开 chat bundle，缓存 5 分钟，可手动刷新；不发
+  账号 Cookie、不调用对话接口，不产生风控流量；失败回退内置 Fast/Pro。
+- **桌面版模型**：可选驱动豆包工作 / 豆包桌面版，读取 App 的模型菜单，把
+  DeepSeek、GLM、Kimi 等模型接到同一个 `/v1`（需要 Windows/macOS 并登录桌面版）。
+- **Web 控制台**：总览、账号、模型、请求记录、API Key、设置；明暗主题；面板
+  密码；登录限流。
+- **默认只监听本机**：`127.0.0.1`；Cookie 与 Key 存在
+  `dola-hub/data/state.json`（600，已 gitignore）；请求日志不记录提示词和 Cookie。
 
-## Repository layout
+## 仓库结构
 
 ```
-dola-hub/          standalone gateway + web dashboard
-  server.mjs       HTTP server, panel API and /v1
-  lib/             store, pool, gateway, models, log, auth
-  public/          single-file dashboard
-  test/            node:test suites
-packages/dola/     magpie / OpenCode provider (same upstream client)
-DISCLAIMER.md      legal disclaimer (English / 中文)
-registry.json      inherited magpie plugin market
-packages/*         inherited magpie / OpenCode plugins
+dola-hub/          独立网关 + Web 控制台
+  server.mjs       HTTP 服务、面板 API、/v1
+  lib/             store、pool、gateway、models、log、auth
+  public/          单文件控制台
+  test/            node:test 测试
+packages/dola/     magpie / OpenCode provider（同一套上游客户端）
+DISCLAIMER.md      中英免责声明
+registry.json      继承的 magpie 插件市场
+packages/*         继承的 magpie / OpenCode 插件
 ```
 
-## Models
+## 模型
 
-| ID | Dola mode | Thinking | Context |
+| ID | Dola 模式 | 思维链 | 上下文 |
 | --- | --- | --- | --- |
-| `dola-fast` | 豆包 快速 (`need_deep_think: 0`) | — | 256k |
-| `dola-pro` | 豆包 专家 (`need_deep_think: 3`) | `reasoning_content` | 128k |
+| `dola-fast` | 豆包 快速（`need_deep_think: 0`） | — | 256k |
+| `dola-pro` | 豆包 专家（`need_deep_think: 3`） | `reasoning_content` | 128k |
 
-The **模型** page reads the live menu from Dola's public `chat.*.js` bundle
-(the `uF` array) and maps it to these two IDs. It fetches only the public
-page and bundle — **no account cookie, no completion request** — caches the
-result for **five minutes**, and the manual **获取模型** button uses the same
-cache. On failure the previous list is kept and the next attempt waits five
-minutes. If the bundle cannot be read, the built-in list is used.
+「模型」页从 Dola 公开的 `chat.*.js` bundle 读取实时菜单（`uF` 数组），映射为
+上面两个 ID。只请求公开页面和 bundle，**不带账号 Cookie、不调用对话接口**；
+缓存 **5 分钟**，手动「获取模型」也走同一缓存；失败保留上一版并等 5 分钟再试；
+bundle 读不到时使用内置列表。
 
-The bundle's other task/office models (豆包 2.1 Lite, 豆包 2.1 Pro, 自动) are
-shown as **未接入**; the chat endpoint does not select them with
-`need_deep_think`. The web bundle contains **no DeepSeek, GLM or Kimi chat
-models** — those belong to the desktop app's menu (see
-[`packages/doubao-work`](packages/doubao-work)) or third-party models added
-with your own API key.
+### 为什么只有豆包模型？
 
-## API keys and model allowlists
+网页 bundle 的 `uF` 只有 **豆包 快速** 和 **豆包 专家**。bundle 里还有工作任务/
+办公模式的 **豆包 2.1 Lite**、**豆包 2.1 Pro**、**自动**（`uB` / `uU` / `uz`），
+它们走 `office/creation` 模式，不是用 `need_deep_think` 选模型，所以控制台把它们
+列在「网页 bundle 中的其他模型」并标记 **未接入**。
 
-Create or edit a key in **API Key**:
+网页 bundle 里**没有 DeepSeek、GLM、Kimi 的聊天模型**。这些出现在桌面端豆包工作
+的模型菜单（见 [`packages/doubao-work`](packages/doubao-work)），或你自己用 API Key
+添加的第三方模型；当前网页 `/chat/completion` 不支持直接选它们。如果你在 Dola
+网页里看到其他模型，抓一个请求的 `client_meta` / `option` 字段，就可以判断能否接入。
 
-- **名称** — a label such as `laptop` or `claude-code`.
-- **可用模型** — tick the models the key may use; none means all.
-- **启用/停用** and **删除** take effect immediately.
+### 桌面版模型（DeepSeek / GLM / Kimi 等）
 
-`GET /v1/models` returns only the models the key is allowed to use; a chat
-request for another model returns `403`. The key is a Bearer token:
+网页模型不够时，网关可以驱动 **豆包工作 / 豆包桌面版**，读取 App 自己的模型菜单，
+把 DeepSeek、GLM、Kimi 等模型加到同一个 `/v1` 接口里：
+
+- 需要 **Windows 或 macOS**，并安装、登录桌面版；Linux 没有桌面版。
+- 「模型」页 → 桌面版后端 → **获取桌面模型**。网关会用自己的 profile 启动 App，
+  读取菜单；模型会出现在「当前模型」表里（后端标记为「桌面」），也会进入 API Key
+  的模型白名单。
+- 桌面版同一时间只能处理一个请求；网关会排队。
+- 桌面版是云端智能体，不是纯模型 API：每个请求会在 App 里新建一个工作任务，
+  文本 only，速度比网页模型慢。
+- 模型 ID 由菜单名称生成，例如 `deepseek-v4.1-flash`、`glm-5.3`、
+  `kimi-k3.1-pro-fast`；以实际菜单为准。
+
+## API Key 与模型白名单
+
+在「API Key」页新建或编辑：
+
+- **名称**：例如 `laptop`、`claude-code`。
+- **可用模型**：勾选这个 Key 能用的模型；不勾选 = 全部。
+- **启用/停用**、**删除**立即生效。
+
+`GET /v1/models` 只返回该 Key 允许的模型；调用未授权模型返回 `403`。Key 作为
+Bearer Token：
 
 ```
 Authorization: Bearer sk-dola-...
 ```
 
-## Configuration
+## 配置
 
-| Variable | Default | Meaning |
+| 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PORT` | `8788` | HTTP port (`--port` also works) |
-| `HOST` | `127.0.0.1` | Bind address (`--host` also works) |
-| `PANEL_PASSWORD` | `admin` | Initial panel password (first run only) |
-| `DOLA_HUB_DATA` | `./data` | State and request ledger directory |
-| `DOLA_BROWSER` | auto | Chrome/Chromium/Edge binary for browser login |
-| `DOLA_BROWSER_HEADLESS` | off | `1` starts the login browser headless |
-| `DOLA_LOGIN_PROFILE` | temp | Reuse a browser profile for browser login |
-| `DOLA_HOME` | platform default | Where the login browser keeps profiles |
+| `PORT` | `8788` | HTTP 端口（也支持 `--port`） |
+| `HOST` | `127.0.0.1` | 监听地址（也支持 `--host`） |
+| `PANEL_PASSWORD` | `admin` | 首次启动的面板密码 |
+| `DOLA_HUB_DATA` | `./data` | 状态与请求日志目录 |
+| `DOLA_BROWSER` | 自动 | 浏览器登录用的 Chrome/Chromium/Edge |
+| `DOLA_BROWSER_HEADLESS` | 关闭 | `1` 用无头浏览器登录 |
+| `DOLA_LOGIN_PROFILE` | 临时 | 复用浏览器 profile |
+| `DOLA_HOME` | 平台默认 | 登录浏览器 profile 目录 |
 
-## Tests
+## 测试
 
 ```sh
 cd dola-hub
 node --test test/*.test.mjs
 
-# the magpie / OpenCode provider
+# magpie / OpenCode provider
 npx bun test packages/dola
 npx bun scripts/check.mjs dola
 ```
 
-The hub tests use fake upstream clients and temporary data directories; they
-sign in to nothing and send no request. The model tests use a sample bundle
-and a fake fetch.
+hub 测试使用假上游和临时数据目录，不登录、不发真实请求；模型测试使用样例
+bundle 和假 fetch。
 
-## Inherited plugins
+## 继承的插件
 
-This repository is a fork of
-[magpie-community/plugins](https://github.com/magpie-community/plugins). The
-other packages, `registry.json` and their READMEs remain in place; see the
-[upstream README](https://github.com/magpie-community/plugins#readme) for the
-full plugin market. The Dola-specific code is `dola-hub/` and
-`packages/dola/`.
+本仓库 fork 自 [magpie-community/plugins](https://github.com/magpie-community/plugins)。
+其他包、`registry.json` 和各自的 README 保留；完整插件市场见
+[上游 README](https://github.com/magpie-community/plugins#readme)。Dola 相关代码只有
+`dola-hub/` 和 `packages/dola/`。
 
-## Legal
+## 法律
 
-- [DISCLAIMER.md](DISCLAIMER.md) — full disclaimer in English and Chinese.
-- [LICENSE](LICENSE) — MIT.
+- [DISCLAIMER.md](DISCLAIMER.md) — 中英完整免责声明。
+- [LICENSE](LICENSE) — MIT。
 
-You are responsible for your own use, accounts and deployment. Do not expose
-the gateway to the public internet without authorization, TLS and a strong
-panel password.
+你需要对自己的使用、账号和部署负责。不要在未经授权、没有 TLS 和强面板密码的
+情况下把网关暴露到公网。
+
+## English
+
+Dola Gateway is an unofficial, self-hosted OpenAI-compatible gateway for
+`dola.com`, with an account pool, weighted rotation, API keys, a live model
+catalog and a web dashboard. The sections above are the primary
+documentation (Chinese); the full bilingual disclaimer is in
+[DISCLAIMER.md](DISCLAIMER.md).

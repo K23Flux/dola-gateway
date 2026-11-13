@@ -1,134 +1,129 @@
 # Dola Hub
 
-A standalone gateway for **dola.com** (ByteDance's international Doubao /
-Cici) with an OpenAI-compatible API, an account pool, rotation, API keys and
-a web dashboard. It reuses the upstream client from
-[`packages/dola`](../packages/dola), which is the magpie/OpenCode provider;
-this folder is the standalone app for a VPS or a desktop.
+**dola.com**（字节跳动国际版豆包 / Cici）的独立网关，带 OpenAI 兼容 API、账号池、
+轮询、API Key 和 Web 控制台。它复用 [`packages/dola`](../packages/dola) 的上游
+客户端；`packages/dola` 是 magpie/OpenCode provider，本目录是给 VPS 或桌面用的
+独立应用。
 
-**Unofficial.** Dola has no public model API. This talks to the endpoint its
-own web window uses, with session cookies. Use an account you can afford to
-lose.
+**非官方。** Dola 没有公开的模型 API；本项目和它自己的网页窗口一样，用会话 Cookie
+调用同一个接口。请用可以承受损失的账号。
 
-> **Disclaimer.** This is an unofficial personal project, not affiliated
-> with ByteDance, Dola, Doubao, Cici or their affiliates. For personal
-> study and research only. You are responsible for complying with Dola's
-> Terms of Service and all applicable laws; unofficial use can lead to
-> rate limits, restrictions or account bans. The software comes with no
-> warranty and no liability. Do not resell, share accounts, mass-register
-> or bypass paid features. Read the full [disclaimer](../DISCLAIMER.md).
+> **免责声明。** 本项目是非官方个人项目，与字节跳动、Dola、豆包、Cici 及其关联方
+> 没有隶属、授权或赞助关系。仅供个人学习研究。你需要自行遵守 Dola 服务条款和
+> 所有适用法律；非官方接入可能导致限流、限制或封号。软件不附带任何保证，作者不
+> 承担赔偿责任。禁止商业转售、共享账号、批量注册或绕过付费功能。完整声明见
+> [DISCLAIMER.md](../DISCLAIMER.md)。
 
-## Quick start
+## 快速开始
 
 ```sh
 cd dola-hub
 node server.mjs
-# or: PORT=8788 HOST=127.0.0.1 PANEL_PASSWORD='change-me' node server.mjs
+# 或：PORT=8788 HOST=127.0.0.1 PANEL_PASSWORD='change-me' node server.mjs
 ```
 
-Open `http://127.0.0.1:8788/`. The first run prints an API key and the panel
-password is `admin` until you change it in **设置**.
+打开 `http://127.0.0.1:8788/`。首次启动会打印一个 API Key；面板密码默认是
+`admin`，登录后请在「设置」里修改。
 
-The dashboard has five pages:
+控制台有这些页面：
 
-- **总览** — today's requests, success rate, active accounts, 24-hour chart,
-  recent requests, account status and the base URL / API key.
-- **账号** — add an account by pasting a Cookie, or with browser login on a
-  machine that has Chrome/Edge; test, enable/disable, delete, inspect stats.
-- **请求记录** — the last 500 calls: key, model, account, status, latency,
-  estimated tokens and the error.
-- **模型** — the live model menu, its source and last fetch, with a manual
-  **获取模型** button (five-minute cache; see below).
-- **API Key** — create keys with a name and a model allowlist, edit them,
-  copy/revoke.
-- **设置** — rotation strategy, retry count, cooldown, sticky sessions,
-  region/language/bot id, per-account concurrency, panel password.
+- **总览** — 今日请求、成功率、可用账号、24 小时分布、最近请求、账号状态、
+  Base URL / API Key。
+- **账号** — 粘贴 Cookie 或浏览器登录添加账号；测试、启停、删除、查看统计。
+- **请求记录** — 最近 500 次调用：Key、模型、账号、状态、耗时、估算 tokens、错误。
+- **模型** — 实时模型菜单、来源、上次获取时间，以及「获取模型」按钮
+  （5 分钟缓存，见下文）。
+- **API Key** — 新建 Key 时填名称和模型白名单；支持编辑、复制、启停、删除。
+- **设置** — 轮询策略、重试次数、冷却、粘性会话、region/language/bot id、
+  每账号并发、面板密码。
 
-## Adding accounts
+## 添加账号
 
-### Paste a Cookie (works on a headless VPS)
+### 粘贴 Cookie（无图形界面的 VPS）
 
-1. Sign in at `https://www.dola.com/chat/` in any browser.
-2. Open DevTools → Network → any request → copy the whole `Cookie` request
-   header.
-3. Dashboard → 账号 → 添加账号 → paste it.
+1. 在任意浏览器登录 `https://www.dola.com/chat/`。
+2. 打开开发者工具 → Network → 任意请求 → 复制整段 `Cookie` 请求头。
+3. 控制台 → 账号 → 添加账号 → 粘贴。
 
-The Cookie needs `sessionid` or `oauth_token`. The hub checks it against
-Dola's passport endpoint and stores it in `data/state.json` (mode 600). It
-never writes cookies to the request log.
+Cookie 需要包含 `sessionid` 或 `oauth_token`。网关会调用 Dola passport 校验，
+然后存到 `data/state.json`（权限 600）。Cookie 不会写进请求日志。
 
-### Browser login (needs a graphical session)
+### 浏览器登录（需要图形界面）
 
-Dashboard → 账号 → 浏览器登录. The hub starts its own Chrome/Chromium/Edge
-on a private profile, opens Dola, and waits for the login callback. When the
-window holds a session cookie, the hub reads it over the DevTools protocol
-(HttpOnly included), closes the window and adds the account.
+控制台 → 账号 → 浏览器登录。网关会用自己的 Chrome/Chromium/Edge 配置打开 Dola，
+等待登录回调；窗口里出现会话 Cookie 后，通过 DevTools 协议读取（包含 HttpOnly），
+关闭窗口并添加账号。
 
-On a headless Linux VPS this is not available; use the Cookie method. SSH X
-forwarding also works. Set `DOLA_BROWSER` if the browser is not in a usual
-place, or `DOLA_BROWSER_HEADLESS=1` for an already signed-in
-`DOLA_LOGIN_PROFILE`.
+无图形界面的 Linux VPS 用不了这个方式，请用粘贴 Cookie；SSH X forwarding 也可以。
+浏览器不在常规位置时设置 `DOLA_BROWSER`；已登录的 `DOLA_LOGIN_PROFILE` 可以配合
+`DOLA_BROWSER_HEADLESS=1` 使用。
 
-## Models
+## 模型
 
-The **模型** page reads the model menu from Dola's public chat bundle (the
-`uF` array: 豆包 快速 / 豆包 专家) and maps it to `dola-fast` / `dola-pro`.
-It fetches the public `https://www.dola.com/chat/` page and the hashed chat
-bundle it links to, **with no account cookie and no completion request**, so
-it does not consume a message or add account traffic.
+「模型」页从 Dola 公开的 chat bundle 读取模型菜单（`uF` 数组：豆包 快速 / 豆包
+专家），映射为 `dola-fast` / `dola-pro`。它只请求公开的
+`https://www.dola.com/chat/` 页面和页面引用的带 hash 的 chat bundle，**不带账号
+Cookie，也不调用对话接口**，所以不消耗消息、不增加账号流量。
 
-The result is cached for **five minutes**. The manual **获取模型** button
-uses the same cache: within five minutes it answers with the cached list and
-makes no request. On failure the previous list is kept and the next attempt
-waits five minutes, so a broken page is not hammered. If the bundle cannot
-be read, the built-in Fast/Pro list is used.
+结果缓存 **5 分钟**。手动「获取模型」按钮使用同一份缓存：5 分钟内只返回缓存，
+不发请求。失败时保留上一版列表，并等 5 分钟再试，避免反复打 Dola；bundle 读不到
+时使用内置的 Fast/Pro 列表。
 
-The API key allowlist is built from this catalog: when creating or editing a
-key, tick the models it may use (none = all). `GET /v1/models` returns only
-the models the key is allowed to use.
+API Key 的模型白名单来自这个目录：新建或编辑 Key 时勾选允许的模型（不勾选 = 全部）。
+`GET /v1/models` 只返回该 Key 允许的模型。
 
-### Why only Doubao?
+### 为什么只有豆包模型？
 
-The web chat bundle's `uF` list has exactly two entries: **豆包 快速** and
-**豆包 专家**. The bundle also contains task/office models — **豆包 2.1
-Lite**, **豆包 2.1 Pro** and **自动** — under `uB` / `uU` / `uz`. They use a
-different request mode (office/creation) and the chat completion endpoint
-does not select them with `need_deep_think`, so the dashboard lists them
-under **网页 bundle 中的其他模型** as **未接入**.
+网页 chat bundle 的 `uF` 只有两项：**豆包 快速** 和 **豆包 专家**。bundle 里还有
+工作任务 / 办公模式的 **豆包 2.1 Lite**、**豆包 2.1 Pro**、**自动**
+（`uB` / `uU` / `uz`）。它们使用 `office/creation` 模式，对话接口不是用
+`need_deep_think` 选它们，所以控制台把它们列在「网页 bundle 中的其他模型」，
+标记为 **未接入**。
 
-The web bundle has **no DeepSeek, GLM or Kimi chat models**. Those may appear
-in the desktop app's model menu (the separate
-[`packages/doubao-work`](../packages/doubao-work) provider reads that menu),
-or as third-party models you added with your own API key; they are not
-selectable through this web endpoint as implemented. If your Dola web account
-shows another model, capture the request's `client_meta` / `option` fields
-and it can be added.
+网页 bundle 里**没有 DeepSeek、GLM、Kimi 的聊天模型**。这些可能出现在桌面端豆包
+工作的模型菜单（由独立的 [`packages/doubao-work`](../packages/doubao-work)
+provider 读取），或你自己用 API Key 添加的第三方模型；当前网页接口不能直接选它们。
+如果你在 Dola 网页账号里看到其他模型，抓一个请求的 `client_meta` / `option` 字段，
+就可以判断能否接入。
 
-## Rotation
+### 桌面版模型（DeepSeek / GLM / Kimi 等）
 
-Every request picks an account from the pool:
+如果网页模型不够，网关可以驱动 **豆包工作** 或 **豆包** 桌面版，读取 App 自己的
+模型菜单，把 DeepSeek、GLM、Kimi 等模型加到同一个 `/v1` 接口里。
 
-| Strategy | What it does |
+- 需要 **Windows 或 macOS**，并安装、登录桌面版；Linux 没有桌面版。
+- 「模型」页 → 桌面版后端 → **获取桌面模型**。网关会用自己的 profile 启动 App，
+  读取模型菜单；模型会出现在「当前模型」表里，后端标记为「桌面」，也会进入
+  API Key 的模型白名单。
+- 桌面版同一时间只能处理一个请求；网关会排队。
+- 桌面版是云端智能体，不是纯模型 API：每个请求会在 App 里新建一个工作任务，
+  文本 only，速度比网页模型慢。
+- 模型 ID 由菜单名称生成，例如 `deepseek-v4.1-flash`、`glm-5.3`、
+  `kimi-k3.1-pro-fast`；以实际菜单为准。
+- 相关环境变量沿用 `packages/doubao-work`：`DOUBAO_WORK_APP`、
+  `DOUBAO_WORK_HOME`。
+
+## 轮询
+
+每次请求从账号池里选一个账号：
+
+| 策略 | 行为 |
 | --- | --- |
-| `round_robin` | smooth weighted round-robin, priority first (default) |
-| `least_inflight` | fewest in-flight requests first |
-| `priority` | lowest `priority` number first, then weighted |
-| `random` | weighted random |
+| `round_robin` | 平滑加权轮询，优先级优先（默认） |
+| `least_inflight` | 当前并发最少的账号优先 |
+| `priority` | `priority` 数字最小的优先，再按权重 |
+| `random` | 加权随机 |
 
-- **Sticky sessions** — `user` in the request body or `X-Session-Id` keeps a
-  conversation on one account for `stickyTtlSeconds` (0 disables).
-- **Failover** — a 401 marks the account invalid; a 429/5xx/network error
-  puts it in exponential cooldown. A failure before the first streamed delta
-  moves the request to the next account; after the first delta the client
-  gets the error instead of mixed output.
-- **Concurrency** — each account has a limit; the pool skips accounts at
-  their limit.
-- **Stats** — attempts, successes, failures and last use are saved per
-  account and shown in the dashboard.
+- **粘性会话** — 请求体里的 `user` 或 `X-Session-Id` 会让同一会话在
+  `stickyTtlSeconds` 内固定在一个账号（0 关闭）。
+- **故障转移** — 401 标记账号失效；429/5xx/网络错误进入指数冷却。首个流式增量
+  之前失败会自动换号；增量之后失败则直接报错，不会把多个账号的输出混在一起。
+- **并发** — 每个账号有并发上限，达到上限的账号会被跳过。
+- **统计** — 尝试数、成功、失败、最近使用都会按账号保存并显示在控制台。
 
 ## API
 
-Base URL: `http://<host>:<port>/v1`, key from the dashboard.
+Base URL：`http://<host>:<port>/v1`，Key 从控制台获取。
 
 ```sh
 curl http://127.0.0.1:8788/v1/chat/completions \
@@ -141,42 +136,39 @@ curl http://127.0.0.1:8788/v1/chat/completions \
   }'
 ```
 
-Models: `dola-fast` (no deep think) and `dola-pro` (deep think, served as
-`reasoning_content`). `GET /v1/models` lists what the key may use.
+模型：`dola-fast`（不深度思考）和 `dola-pro`（深度思考，返回
+`reasoning_content`）。`GET /v1/models` 只列出该 Key 允许的模型。
 
-The gateway is stateless: each request opens a throwaway Dola conversation
-and flattens the whole chat history (including tool definitions) into one
-message. Client tools are asked for as `<tool_call>` text and returned as
-OpenAI `tool_calls`. Images and files are not supported.
+网关是无状态的：每次请求新建一个临时 Dola 会话，把整段对话历史（包括工具定义）
+压成一条消息。客户端工具用 `<tool_call>` 文本请求，再还原成 OpenAI `tool_calls`。
+暂不支持图片和文件。
 
-## Environment
+## 环境变量
 
-| Variable | Default | Meaning |
+| 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PORT` | `8788` | HTTP port (`--port` also works) |
-| `HOST` | `127.0.0.1` | Bind address (`--host` also works) |
-| `PANEL_PASSWORD` | `admin` | Initial panel password (first run only) |
-| `DOLA_HUB_DATA` | `./data` | State and request ledger directory |
-| `DOLA_BROWSER` | auto | Chrome/Chromium/Edge binary for browser login |
-| `DOLA_BROWSER_HEADLESS` | off | `1` starts the login browser headless |
-| `DOLA_LOGIN_PROFILE` | temp | Reuse a browser profile for browser login |
-| `DOLA_HOME` | platform default | Where the login browser keeps profiles |
+| `PORT` | `8788` | HTTP 端口（也支持 `--port`） |
+| `HOST` | `127.0.0.1` | 监听地址（也支持 `--host`） |
+| `PANEL_PASSWORD` | `admin` | 首次启动的面板密码 |
+| `DOLA_HUB_DATA` | `./data` | 状态与请求日志目录 |
+| `DOLA_BROWSER` | 自动 | 浏览器登录用的 Chrome/Chromium/Edge |
+| `DOLA_BROWSER_HEADLESS` | 关闭 | `1` 用无头浏览器登录 |
+| `DOLA_LOGIN_PROFILE` | 临时 | 复用浏览器 profile |
+| `DOLA_HOME` | 平台默认 | 登录浏览器 profile 目录 |
 
-## Security
+## 安全
 
-- The panel binds to `127.0.0.1` by default. If you set `HOST=0.0.0.0`,
-  put it behind TLS and change the panel password immediately.
-- Cookies are full account access. `data/state.json` is mode 600 and
-  `.gitignore`d; never commit it.
-- The request ledger stores no prompts and no cookies.
-- There is no multi-user panel: one password, one set of accounts and keys.
+- 面板默认只监听 `127.0.0.1`。如果设置 `HOST=0.0.0.0`，请放在 TLS 后面，并
+  立即修改面板密码。
+- Cookie 等同于账号权限。`data/state.json` 权限 600，且已 gitignore；不要提交。
+- 请求日志不记录提示词和 Cookie。
+- 面板是单用户的：一个密码、一套账号和 Key。
 
-## Tests
+## 测试
 
 ```sh
 cd dola-hub
 node --test test/*.test.mjs
 ```
 
-The tests use fake upstream clients and temporary data directories; they
-sign in to nothing and send no request.
+测试使用假上游和临时数据目录；不登录、不发真实请求。

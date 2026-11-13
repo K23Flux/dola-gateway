@@ -9,12 +9,12 @@ import { createPool } from "../lib/pool.mjs"
 import { createLog } from "../lib/log.mjs"
 import { createGateway } from "../lib/gateway.mjs"
 
-function setup(client, { models = [], accounts = [] } = {}) {
+function setup(client, { models = [], accounts = [], catalog, desktop } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dola-hub-gw-"))
   const store = createStore({ dataDir: dir, env: { PANEL_PASSWORD: "pw" } })
   const pool = createPool({ store })
   const log = createLog({ dataDir: dir })
-  const gateway = createGateway({ store, pool, log, client })
+  const gateway = createGateway({ store, pool, log, catalog, desktop, client })
   const key = store.addKey({ name: "test", models })
   for (const a of accounts) store.addAccount(a)
   const server = createServer((req, res) => gateway.handle(req, res, key, new URL(req.url, "http://x")))
@@ -161,6 +161,40 @@ test("a key's model allowlist is enforced", async () => {
     assert.equal(res.status, 403)
     const ok = await chat(h.url, h.key.key, { model: "dola-pro", messages: [{ role: "user", content: "hi" }] })
     assert.equal(ok.status, 200)
+  } finally {
+    await h.close()
+  }
+})
+
+test("a desktop model is served by the desktop backend", async () => {
+  const desktopModel = {
+    id: "deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    backend: "desktop",
+    desktopId: "deepseek-v4.1-flash",
+    context: 0,
+  }
+  const catalog = {
+    currentModels: () => [desktopModel],
+    find: (id) => (id === desktopModel.id ? desktopModel : null),
+    snapshot: () => ({ models: [desktopModel] }),
+  }
+  const desktop = {
+    ask: async ({ onUpdate }) => {
+      onUpdate?.({ text: "DS", reasoning: "" })
+      return { text: "DS", reasoning: "" }
+    },
+  }
+  const h = await setup(helloClient, { catalog, desktop })
+  try {
+    const res = await chat(h.url, h.key.key, {
+      model: "deepseek-v4.1-flash",
+      messages: [{ role: "user", content: "hi" }],
+    })
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    assert.equal(body.choices[0].message.content, "DS")
+    assert.equal(h.log.entries.at(-1).account, "desktop")
   } finally {
     await h.close()
   }

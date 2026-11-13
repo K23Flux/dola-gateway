@@ -427,7 +427,7 @@
       <!-- models -->
       <section id="page-models" class="page" hidden>
         <div class="page-head">
-          <div><h2>模型</h2><p>从 Dola 公共网页资源读取，不使用账号请求；5 分钟最多获取一次。</p></div>
+          <div><h2>模型</h2><p>网页模型从 Dola 公共网页资源读取；桌面模型来自豆包工作/豆包 App 的模型菜单。</p></div>
           <div class="row">
             <span class="pill" id="modelSourcePill">—</span>
             <button class="btn primary" id="refreshModelsBtn" onclick="refreshModels()">获取模型</button>
@@ -437,10 +437,14 @@
           <div class="panel-head"><h3>当前模型</h3><span class="spacer"></span><span class="dim" id="modelStatusText"></span></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>模型 ID</th><th>名称</th><th>模式</th><th class="num">上下文</th><th>思维链</th><th>需要登录</th></tr></thead>
+              <thead><tr><th>模型 ID</th><th>后端</th><th>名称</th><th>模式</th><th class="num">上下文</th><th>思维链</th><th>需要登录</th></tr></thead>
               <tbody id="modelsBody"></tbody>
             </table>
           </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>桌面版后端</h3><span class="spacer"></span><button class="btn" id="refreshDesktopBtn" onclick="refreshDesktopModels()">获取桌面模型</button></div>
+          <div class="panel-body" id="desktopStatusBody"></div>
         </div>
         <div class="panel">
           <div class="panel-head"><h3>网页 bundle 中的其他模型</h3><span class="spacer"></span><span class="dim">未接入</span></div>
@@ -451,7 +455,7 @@
             </table>
           </div>
           <div class="panel-body">
-            <div class="form-hint">Dola 网页聊天接口当前只支持豆包 快速 / 专家。这些工作任务模型使用不同的请求模式，尚未接入；网页 bundle 中没有 DeepSeek / Kimi / GLM 的聊天模型。桌面端菜单可能另有模型（见 packages/doubao-work）。</div>
+            <div class="form-hint">Dola 网页聊天接口当前只支持豆包 快速 / 专家。这些工作任务模型使用不同的请求模式，尚未接入；网页 bundle 中没有 DeepSeek / Kimi / GLM 的聊天模型。桌面端菜单可能另有模型，用上方「桌面版后端 → 获取桌面模型」接入。</div>
           </div>
         </div>
         <div class="panel">
@@ -807,31 +811,38 @@ function renderModels() {
   const models = state.models || [];
   body.innerHTML = models.length
     ? models
-        .map(
-          (m) =>
+        .map((m) => {
+          const isDesktop = m.backend === "desktop";
+          return (
             "<tr>" +
             '<td class="mono-sm">' +
             esc(m.id) +
+            "</td>" +
+            "<td>" +
+            (isDesktop ? '<span class="chip accent">桌面</span>' : '<span class="chip">网页</span>') +
             "</td>" +
             "<td><b>" +
             esc(m.name || m.id) +
             "</b></td>" +
             "<td>" +
-            (Number(m.deepThink) > 0
-              ? '<span class="chip accent">专家 · deep think</span>'
-              : '<span class="chip ok">快速</span>') +
+            (isDesktop
+              ? '<span class="chip">桌面菜单</span>'
+              : Number(m.deepThink) > 0
+                ? '<span class="chip accent">专家 · deep think</span>'
+                : '<span class="chip ok">快速</span>') +
             "</td>" +
             '<td class="num">' +
-            esc(fmtNum(m.context)) +
+            (m.context ? esc(fmtNum(m.context)) : "—") +
             "</td>" +
             "<td>" +
-            (m.reasoning ? "是" : "—") +
+            (m.reasoning ? (isDesktop ? "是（视模型）" : "是") : "—") +
             "</td>" +
             "<td>" +
-            (m.needLogin ? "是" : "否") +
+            (isDesktop ? "—" : m.needLogin ? "是" : "否") +
             "</td>" +
-            "</tr>",
-        )
+            "</tr>"
+          );
+        })
         .join("")
     : '<tr><td colspan="6"><div class="empty"><b>没有模型</b><p>点「获取模型」从 Dola 公共网页资源读取。</p></div></td></tr>';
 
@@ -852,7 +863,18 @@ function renderModels() {
     : '<tr><td colspan="4"><div class="empty" style="padding:18px"><b>没有其他模型</b><p>网页 bundle 中没有额外的工作任务模型。</p></div></td></tr>';
 
   const st = state.modelStatus || {};
-  const source = st.source === "live" ? "实时 · Dola 网页" : "内置列表";
+  const ds = st.desktopStatus || {};
+  const desktopModels = ds.models || [];
+  $("#desktopStatusBody").innerHTML =
+    kv("应用", ds.app?.app || "未找到") +
+    kv("可执行文件", ds.app?.binary || "—") +
+    kv("状态", ds.available ? "可用" : "不可用") +
+    kv("模型数", desktopModels.length) +
+    kv("上次获取", ds.fetchedAt ? fmtTime(new Date(ds.fetchedAt).toISOString()) : "—") +
+    (ds.error ? '<div class="warn-box" style="margin-top:12px">' + esc(ds.error) + "</div>" : "") +
+    '<div class="form-hint" style="margin-top:12px">桌面版模型来自豆包工作/豆包 App 的模型菜单，需要 Windows/macOS 并已登录；同一时间只能处理一个请求。Linux 没有桌面版。</div>';
+
+  const source = desktopModels.length ? "网页 + 桌面" : st.source === "live" ? "实时 · Dola 网页" : "内置列表";
   $("#modelSourcePill").textContent = source;
   $("#modelSourcePill").className = "pill" + (st.source === "live" ? "" : " muted");
   $("#modelStatusText").textContent = st.fetchedAt
@@ -887,6 +909,26 @@ async function refreshModels() {
   } finally {
     btn.disabled = false;
     btn.textContent = "获取模型";
+  }
+}
+
+async function refreshDesktopModels() {
+  const btn = $("#refreshDesktopBtn");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "获取中…";
+  try {
+    const d = await api("/api/models/desktop/refresh", { method: "POST" });
+    state.modelStatus = d;
+    state.models = d.models || [];
+    renderModels();
+    if (d.desktopStatus?.error) toast("桌面模型获取失败：" + d.desktopStatus.error, "bad");
+    else toast("桌面模型已更新");
+  } catch (e) {
+    toast(e.message, "bad");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "获取桌面模型";
   }
 }
 

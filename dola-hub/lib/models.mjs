@@ -254,6 +254,7 @@ export function createModelCatalog({
   fetchImpl = globalThis.fetch,
   cacheMs = 5 * 60 * 1000,
   now = () => Date.now(),
+  desktop,
 } = {}) {
   let state = {
     models: copyModels(BUILTIN_MODELS),
@@ -265,9 +266,25 @@ export function createModelCatalog({
   }
   let inflight = null
 
+  function desktopStatus() {
+    return (
+      desktop?.current?.() || {
+        models: [],
+        available: false,
+        app: { app: "", binary: "", dataDir: "" },
+        error: "",
+        fetchedAt: 0,
+      }
+    )
+  }
+
+  function currentModels() {
+    return [...state.models.map((m) => ({ ...m, backend: "web" })), ...desktopStatus().models]
+  }
+
   function snapshot() {
     return {
-      models: copyModels(state.models),
+      models: currentModels(),
       otherModels: state.otherModels.map((m) => ({ ...m })),
       source: state.source,
       fetchedAt: state.fetchedAt,
@@ -276,6 +293,7 @@ export function createModelCatalog({
       error: state.error,
       bundleUrl: state.bundleUrl,
       refreshing: Boolean(inflight),
+      desktopStatus: desktopStatus(),
     }
   }
 
@@ -311,8 +329,8 @@ export function createModelCatalog({
   return {
     refresh,
     snapshot,
-    currentModels: () => state.models,
-    find: (id) => state.models.find((m) => m.id === id) || null,
+    currentModels,
+    find: (id) => currentModels().find((m) => m.id === id) || null,
     cacheMs,
   }
 }

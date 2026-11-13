@@ -12,7 +12,7 @@ import { streamCompletion } from "../../packages/dola/dola.mjs"
 import { BUILTIN_MODELS } from "./models.mjs"
 
 const FALLBACK_CATALOG = {
-  currentModels: () => BUILTIN_MODELS,
+  currentModels: () => BUILTIN_MODELS.map((m) => ({ ...m, backend: "web" })),
   find: (id) => BUILTIN_MODELS.find((m) => m.id === id) || null,
   snapshot: () => ({
     models: BUILTIN_MODELS,
@@ -110,7 +110,14 @@ const retryable = (e) =>
   Number(e?.status) === 429 ||
   Number(e?.status) >= 500
 
-export function createGateway({ store, pool, log, catalog = FALLBACK_CATALOG, client = { streamCompletion } }) {
+export function createGateway({
+  store,
+  pool,
+  log,
+  catalog = FALLBACK_CATALOG,
+  desktop = null,
+  client = { streamCompletion },
+}) {
   async function handle(req, res, key, url) {
     cors(res)
     if (req.method === "OPTIONS") {
@@ -239,6 +246,52 @@ export function createGateway({ store, pool, log, catalog = FALLBACK_CATALOG, cl
       }
       record(Number(lastError?.status) || 503, null, lastError?.message ?? "no account")
       throw lastError ?? new HubError("没有可用账号", 503, "no_account")
+    }
+
+    // Desktop models (DeepSeek / GLM / Kimi / ...) come from the app's own
+    // menu, not from the web account pool. The adapter serializes requests.
+    if (modelInfo.backend === "desktop") {
+      if (!desktop) return sendError(res, 503, "桌面版后端未启用", "desktop_unavailable")
+      const statusOf = (e) =>
+        Number(e?.status) ||
+        (e?.code === "doubao_signed_out"
+          ? 401
+          : e?.code === "doubao_upgrade"
+            ? 403
+            : e?.code === "doubao_timeout"
+              ? 504
+              : e?.code === "desktop_model_missing"
+                ? 404
+                : 502)
+      const askDesktop = async (onUpdate, askSignal) => {
+        try {
+          const read = await desktop.ask({
+            prompt,
+            model: modelInfo.desktopId || modelInfo.id,
+            signal: askSignal,
+            onUpdate,
+          })
+          record(200, { accountId: "desktop" }, "", read.text, read.reasoning)
+          return read
+        } catch (e) {
+          record(statusOf(e), { accountId: "desktop" }, e?.message ?? e)
+          throw e
+        }
+      }
+      try {
+        if (body.stream) return await sse({ id, model, ask: askDesktop, signal, promptText: prompt })
+        const final = await askDesktop(undefined, signal)
+        return sendJson(res, 200, completion({ id, model, final, promptText: prompt }))
+      } catch (e) {
+        if (res.headersSent) {
+          try {
+            res.end()
+          } catch {}
+          return
+        }
+        if (e?.name === "AbortError" || e?.code === "client_aborted") return
+        return sendError(res, statusOf(e), e?.message ?? e, e?.code ?? "desktop_error")
+      }
     }
 
     try {

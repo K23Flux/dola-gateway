@@ -19,6 +19,7 @@ import { createLog } from "./lib/log.mjs"
 import { createAuth } from "./lib/auth.mjs"
 import { createGateway, HubError } from "./lib/gateway.mjs"
 import { createModelCatalog } from "./lib/models.mjs"
+import { createDesktopBackend } from "./lib/desktop.mjs"
 import {
   accountInfo,
   cookieValue,
@@ -45,8 +46,9 @@ const store = createStore({ dataDir: DATA_DIR })
 const pool = createPool({ store })
 const log = createLog({ dataDir: DATA_DIR })
 const auth = createAuth({ store })
-const catalog = createModelCatalog()
-const gateway = createGateway({ store, pool, log, catalog })
+const desktop = createDesktopBackend()
+const catalog = createModelCatalog({ desktop })
+const gateway = createGateway({ store, pool, log, catalog, desktop })
 
 const createdKey = store.ensureDefaultKey()
 const startedAt = Date.now()
@@ -284,6 +286,11 @@ async function handle(req, res) {
     return sendJson(res, 200, snap)
   }
 
+  if (path === "/api/models/desktop/refresh" && req.method === "POST") {
+    await desktop.refresh()
+    return sendJson(res, 200, catalog.snapshot())
+  }
+
   if (path === "/api/accounts" && req.method === "GET") {
     return sendJson(res, 200, { accounts: accountsWithRuntime() })
   }
@@ -477,6 +484,8 @@ server.listen(PORT, HOST, () => {
   console.log(`  panel: http://${HOST === "0.0.0.0" ? "127.0.0.1" : HOST}:${PORT}/`)
   console.log(`  api:   http://${HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST}:${PORT}/v1`)
   console.log(`  data:  ${DATA_DIR}`)
+  const ds = desktop.current()
+  console.log(`  desktop: ${ds.available ? ds.app.app || ds.app.binary : "not found (web models only)"}`)
   if (createdKey) console.log(`  created API key "${createdKey.name}": ${createdKey.key}`)
   if (store.isDefaultPassword()) console.warn(`  panel password is still "admin"; change it in Settings`)
   if (HOST === "0.0.0.0") console.warn(`  listening on all interfaces; put it behind TLS and a strong panel password`)
