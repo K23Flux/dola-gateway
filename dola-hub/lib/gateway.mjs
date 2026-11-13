@@ -9,18 +9,19 @@ import { randomUUID } from "node:crypto"
 import { completion, sse } from "../../packages/dola/openai.mjs"
 import { flatten } from "../../packages/dola/prompt.mjs"
 import { streamCompletion } from "../../packages/dola/dola.mjs"
+import { BUILTIN_MODELS } from "./models.mjs"
 
-export const MODELS = {
-  "dola-fast": {
-    name: "Dola Fast",
-    limit: { context: 256000, output: 32768 },
-    reasoning: false,
-  },
-  "dola-pro": {
-    name: "Dola Pro",
-    limit: { context: 256000, output: 32768 },
-    reasoning: true,
-  },
+const FALLBACK_CATALOG = {
+  currentModels: () => BUILTIN_MODELS,
+  find: (id) => BUILTIN_MODELS.find((m) => m.id === id) || null,
+  snapshot: () => ({
+    models: BUILTIN_MODELS,
+    source: "builtin",
+    fetchedAt: 0,
+    nextAt: 0,
+    error: "",
+    refreshing: false,
+  }),
 }
 
 export class HubError extends Error {
@@ -109,7 +110,7 @@ const retryable = (e) =>
   Number(e?.status) === 429 ||
   Number(e?.status) >= 500
 
-export function createGateway({ store, pool, log, client = { streamCompletion } }) {
+export function createGateway({ store, pool, log, catalog = FALLBACK_CATALOG, client = { streamCompletion } }) {
   async function handle(req, res, key, url) {
     cors(res)
     if (req.method === "OPTIONS") {
@@ -122,15 +123,16 @@ export function createGateway({ store, pool, log, client = { streamCompletion } 
       if (req.method !== "GET") return sendError(res, 405, "method not allowed", "method_not_allowed")
       return sendJson(res, 200, {
         object: "list",
-        data: Object.entries(MODELS)
-          .filter(([id]) => matchesModel(key.models, id))
-          .map(([id, m]) => ({
-            id,
+        data: catalog
+          .currentModels()
+          .filter((m) => matchesModel(key.models, m.id))
+          .map((m) => ({
+            id: m.id,
             object: "model",
             created: 0,
             owned_by: "dola",
             name: m.name,
-            context_window: m.limit.context,
+            context_window: m.context,
           })),
       })
     }
@@ -152,13 +154,19 @@ export function createGateway({ store, pool, log, client = { streamCompletion } 
     }
 
     const model = String(body.model ?? "dola-fast").replace(/^dola\//, "")
-    if (!MODELS[model])
-      return sendError(res, 404, `unknown model ${model}; use ${Object.keys(MODELS).join(" or ")}`, "model_not_found")
+    const modelInfo = catalog.find(model)
+    if (!modelInfo)
+      return sendError(
+        res,
+        404,
+        `unknown model ${model}; use ${catalog.currentModels().map((m) => m.id).join(" or ")}`,
+        "model_not_found",
+      )
     if (!matchesModel(key.models, model))
       return sendError(res, 403, `this API key is not allowed to use ${model}`, "model_not_allowed")
 
     const prompt = flatten(body)
-    const deepThink = model === "dola-pro" ? 3 : 0
+    const deepThink = Number(modelInfo.deepThink) || 0
     const sessionKey = String(body.user ?? req.headers["x-session-id"] ?? body.metadata?.session_id ?? "")
     const id = "chatcmpl-" + randomUUID().replace(/-/g, "").slice(0, 24)
     const started = Date.now()
@@ -262,5 +270,5 @@ export function createGateway({ store, pool, log, client = { streamCompletion } 
     }
   }
 
-  return { handle, MODELS }
+  return { handle, models: () => catalog.currentModels() }
 }

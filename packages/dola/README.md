@@ -1,5 +1,10 @@
 # Dola (dola.com)
 
+> **Unofficial.** This is a personal project, not affiliated with ByteDance
+> or Dola. For personal study and research only; comply with Dola's Terms
+> of Service and applicable law. See the repository
+> [disclaimer](../../DISCLAIMER.md).
+
 **Unofficial.** Dola is ByteDance's international build of Doubao / Cici.
 It has no public model API. This plugin calls the same endpoint Dola's own
 web window calls, with the session cookies a signed-in browser holds, and

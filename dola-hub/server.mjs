@@ -17,7 +17,8 @@ import { createStore } from "./lib/store.mjs"
 import { createPool } from "./lib/pool.mjs"
 import { createLog } from "./lib/log.mjs"
 import { createAuth } from "./lib/auth.mjs"
-import { createGateway, HubError, MODELS } from "./lib/gateway.mjs"
+import { createGateway, HubError } from "./lib/gateway.mjs"
+import { createModelCatalog } from "./lib/models.mjs"
 import {
   accountInfo,
   cookieValue,
@@ -44,7 +45,8 @@ const store = createStore({ dataDir: DATA_DIR })
 const pool = createPool({ store })
 const log = createLog({ dataDir: DATA_DIR })
 const auth = createAuth({ store })
-const gateway = createGateway({ store, pool, log })
+const catalog = createModelCatalog()
+const gateway = createGateway({ store, pool, log, catalog })
 
 const createdKey = store.ensureDefaultKey()
 const startedAt = Date.now()
@@ -255,6 +257,9 @@ async function handle(req, res) {
   if (path === "/api/overview" && req.method === "GET") {
     const stats = log.stats()
     const accounts = accountsWithRuntime()
+    // stale-while-revalidate: answer with the current list and refresh the
+    // public bundle in the background (the catalog enforces five minutes)
+    catalog.refresh().catch(() => {})
     return sendJson(res, 200, {
       ...stats,
       accounts,
@@ -262,10 +267,21 @@ async function handle(req, res) {
       activeAccounts: pool.activeCount(),
       inflight: accounts.reduce((n, a) => n + (a.inflight || 0), 0),
       settings: store.state.settings,
-      models: Object.entries(MODELS).map(([id, m]) => ({ id, name: m.name })),
+      models: catalog.currentModels(),
+      modelStatus: catalog.snapshot(),
       version: VERSION,
       defaultPassword: store.isDefaultPassword(),
     })
+  }
+
+  if (path === "/api/models" && req.method === "GET") {
+    const snap = await catalog.refresh()
+    return sendJson(res, 200, snap)
+  }
+
+  if (path === "/api/models/refresh" && req.method === "POST") {
+    const snap = await catalog.refresh()
+    return sendJson(res, 200, snap)
   }
 
   if (path === "/api/accounts" && req.method === "GET") {

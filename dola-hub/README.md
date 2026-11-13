@@ -10,6 +10,14 @@ this folder is the standalone app for a VPS or a desktop.
 own web window uses, with session cookies. Use an account you can afford to
 lose.
 
+> **Disclaimer.** This is an unofficial personal project, not affiliated
+> with ByteDance, Dola, Doubao, Cici or their affiliates. For personal
+> study and research only. You are responsible for complying with Dola's
+> Terms of Service and all applicable laws; unofficial use can lead to
+> rate limits, restrictions or account bans. The software comes with no
+> warranty and no liability. Do not resell, share accounts, mass-register
+> or bypass paid features. Read the full [disclaimer](../DISCLAIMER.md).
+
 ## Quick start
 
 ```sh
@@ -29,7 +37,10 @@ The dashboard has five pages:
   machine that has Chrome/Edge; test, enable/disable, delete, inspect stats.
 - **请求记录** — the last 500 calls: key, model, account, status, latency,
   estimated tokens and the error.
-- **API Key** — create keys, restrict each to a model allowlist, copy/revoke.
+- **模型** — the live model menu, its source and last fetch, with a manual
+  **获取模型** button (five-minute cache; see below).
+- **API Key** — create keys with a name and a model allowlist, edit them,
+  copy/revoke.
 - **设置** — rotation strategy, retry count, cooldown, sticky sessions,
   region/language/bot id, per-account concurrency, panel password.
 
@@ -57,6 +68,24 @@ On a headless Linux VPS this is not available; use the Cookie method. SSH X
 forwarding also works. Set `DOLA_BROWSER` if the browser is not in a usual
 place, or `DOLA_BROWSER_HEADLESS=1` for an already signed-in
 `DOLA_LOGIN_PROFILE`.
+
+## Models
+
+The **模型** page reads the model menu from Dola's public chat bundle (the
+`uF` array: 豆包 快速 / 豆包 专家) and maps it to `dola-fast` / `dola-pro`.
+It fetches the public `https://www.dola.com/chat/` page and the hashed chat
+bundle it links to, **with no account cookie and no completion request**, so
+it does not consume a message or add account traffic.
+
+The result is cached for **five minutes**. The manual **获取模型** button
+uses the same cache: within five minutes it answers with the cached list and
+makes no request. On failure the previous list is kept and the next attempt
+waits five minutes, so a broken page is not hammered. If the bundle cannot
+be read, the built-in Fast/Pro list is used.
+
+The API key allowlist is built from this catalog: when creating or editing a
+key, tick the models it may use (none = all). `GET /v1/models` returns only
+the models the key is allowed to use.
 
 ## Rotation
 

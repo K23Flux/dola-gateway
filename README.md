@@ -9,6 +9,12 @@ magpie, maintained by the community. To make one, see
 vendor service and makes its requests. The packages work in OpenCode and in
 [magpie](https://usemagpie.ai), which runs OpenCode's provider plugins.
 
+> **Fork notice:** this fork adds an unofficial Dola gateway for personal
+> study and research. It is not affiliated with ByteDance or Dola. Use at
+> your own risk, comply with the upstream terms of service, and do not
+> resell or share accounts. See [DISCLAIMER.md](DISCLAIMER.md) and
+> [dola-hub](dola-hub) for details.
+
 | Package | Signs in to | Provider id |
 |---|---|---|
 | [agnes](packages/agnes) | Agnes AI international (agnes-ai.com), with Chrome browser sign-in, live text models, plan usage and USD balance | `agnes` |
@@ -429,6 +435,15 @@ MAGPIE=/path/to/magpie scripts/try.sh <name> [login <id> | provider test <id>-pl
 
 `try.sh` runs magpie in a sandbox HOME (`.sandbox/<name>`), so your own
 magpie, agents and sign-ins are left alone.
+
+## Standalone apps
+
+- **[dola-hub](dola-hub)** — a standalone Dola (`dola.com`) gateway with an
+  OpenAI-compatible API, an account pool with weighted rotation, sticky
+  sessions, cooldown/failover, API keys with model allowlists, a request
+  ledger and a web dashboard. It reuses the upstream client from
+  [`packages/dola`](packages/dola). Unofficial; see
+  [DISCLAIMER.md](DISCLAIMER.md).
 
 ## License
 

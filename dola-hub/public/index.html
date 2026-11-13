@@ -186,6 +186,13 @@
   .form-grid .full{grid-column:1/-1}
   .form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
   .form-hint{font-size:11.5px;color:var(--dim-light);margin-top:2px;line-height:1.5}
+  .check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .check{display:flex;align-items:flex-start;gap:8px;border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:8px 10px;font-size:12.5px;cursor:pointer}
+  .check input{accent-color:var(--accent);margin-top:3px;flex:0 0 auto}
+  .check span{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .check code{font-size:11px;color:var(--dim-light)}
+  .check:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+  @media (max-width:640px){.check-grid{grid-template-columns:1fr}}
   .kv{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:12.5px;flex-wrap:wrap}
   .kv:last-child{border-bottom:0}
   .kv .k{width:96px;flex:0 0 96px;color:var(--dim);font-weight:600}
@@ -288,6 +295,10 @@
         请求记录
       </button>
       <div class="nav-label">配置</div>
+      <button data-page="models" onclick="navigate('models')">
+        <svg viewBox="0 0 24 24"><path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z"/><path d="M3 12.5 12 17l9-4.5"/><path d="M3 17.5 12 22l9-4.5"/></svg>
+        模型
+      </button>
       <button data-page="keys" onclick="navigate('keys')">
         <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/></svg>
         API Key
@@ -359,7 +370,7 @@
           <div class="panel-body">
             <div class="kv"><span class="k">Base URL</span><code id="baseUrl">—</code><button class="btn ghost sm" onclick="copyText(document.getElementById('baseUrl').textContent,'Base URL')">复制</button></div>
             <div class="kv"><span class="k">API Key</span><code id="quickKey">—</code><button class="btn ghost sm" onclick="copyText(state.quickKey,'API Key')">复制</button></div>
-            <div class="kv"><span class="k">模型</span><code>dola-fast</code><code>dola-pro</code></div>
+            <div class="kv"><span class="k">模型</span><span id="overviewModels"><code>dola-fast</code> <code>dola-pro</code></span></div>
             <pre class="code" id="curlExample" style="margin-top:12px"></pre>
           </div>
         </div>
@@ -410,6 +421,30 @@
               <tbody id="requestsBody"></tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      <!-- models -->
+      <section id="page-models" class="page" hidden>
+        <div class="page-head">
+          <div><h2>模型</h2><p>从 Dola 公共网页资源读取，不使用账号请求；5 分钟最多获取一次。</p></div>
+          <div class="row">
+            <span class="pill" id="modelSourcePill">—</span>
+            <button class="btn primary" id="refreshModelsBtn" onclick="refreshModels()">获取模型</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>当前模型</h3><span class="spacer"></span><span class="dim" id="modelStatusText"></span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>模型 ID</th><th>名称</th><th>模式</th><th class="num">上下文</th><th>思维链</th><th>需要登录</th></tr></thead>
+              <tbody id="modelsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>获取状态</h3></div>
+          <div class="panel-body" id="modelStatusBody"></div>
         </div>
       </section>
 
@@ -500,6 +535,8 @@ const state = {
   accounts: [],
   requests: [],
   keys: [],
+  models: [],
+  modelStatus: null,
   settings: null,
   quickKey: "",
   timer: null,
@@ -585,6 +622,7 @@ const PAGES = {
   overview: { title: "总览", desc: "账号池、今日请求与最近调用" },
   accounts: { title: "账号", desc: "添加、测试与启停 Dola 账号" },
   requests: { title: "请求记录", desc: "最近的网关调用与错误" },
+  models: { title: "模型", desc: "实时模型目录与获取状态" },
   keys: { title: "API Key", desc: "客户端密钥与模型权限" },
   settings: { title: "设置", desc: "路由、冷却与上游参数" },
 };
@@ -610,6 +648,7 @@ function refreshPage() {
   if (state.page === "overview") loadOverview();
   else if (state.page === "accounts") loadAccounts();
   else if (state.page === "requests") loadRequests();
+  else if (state.page === "models") loadModels();
   else if (state.page === "keys") loadKeys();
   else if (state.page === "settings") loadSettings();
 }
@@ -629,6 +668,8 @@ async function loadOverview(silent = false) {
     ]);
     state.overview = d;
     state.keys = k.keys || [];
+    state.models = d.models || state.models;
+    state.modelStatus = d.modelStatus || state.modelStatus;
     renderOverview(d);
   } catch (e) {
     if (!silent) toast(e.message, "bad");
@@ -659,6 +700,8 @@ function renderOverview(d) {
     "  -H \"Authorization: Bearer " + (key ? maskKey(key) : "sk-dola-…") + "\" \\\n" +
     "  -H \"Content-Type: application/json\" \\\n" +
     "  -d '{\"model\":\"dola-fast\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}'";
+  const models = state.models.length ? state.models : [{ id: "dola-fast" }, { id: "dola-pro" }];
+  $("#overviewModels").innerHTML = models.map((m) => "<code>" + esc(m.id) + "</code>").join(" ");
 }
 
 function renderChart(hourly) {
@@ -706,6 +749,117 @@ function renderOverviewAccounts(accounts) {
       '<span class="chip ' + st.cls + '">' + esc(st.label) + '</span>' +
       '<span class="meta">' + (a.inflight ? a.inflight + " 并发" : "") + '</span></div>';
   }).join("");
+}
+
+/* ---------- models ---------- */
+async function loadModels({ silent = false } = {}) {
+  try {
+    const d = await api("/api/models");
+    state.models = d.models || [];
+    state.modelStatus = d;
+    renderModels();
+  } catch (e) {
+    if (!silent) toast(e.message, "bad");
+  }
+}
+
+function modelCheckboxes(selected = []) {
+  const models = state.models.length
+    ? state.models
+    : [
+        { id: "dola-fast", name: "Dola Fast" },
+        { id: "dola-pro", name: "Dola Pro" },
+      ];
+  return models
+    .map(
+      (m) =>
+        '<label class="check"><input type="checkbox" value="' +
+        esc(m.id) +
+        '"' +
+        (selected.includes(m.id) ? " checked" : "") +
+        "><span><b>" +
+        esc(m.name || m.id) +
+        "</b><code>" +
+        esc(m.id) +
+        "</code></span></label>",
+    )
+    .join("");
+}
+
+function checkedModels(selector) {
+  return [...document.querySelectorAll(selector + " input[type=checkbox]:checked")].map((i) => i.value);
+}
+
+function renderModels() {
+  const body = $("#modelsBody");
+  const models = state.models || [];
+  body.innerHTML = models.length
+    ? models
+        .map(
+          (m) =>
+            "<tr>" +
+            '<td class="mono-sm">' +
+            esc(m.id) +
+            "</td>" +
+            "<td><b>" +
+            esc(m.name || m.id) +
+            "</b></td>" +
+            "<td>" +
+            (Number(m.deepThink) > 0
+              ? '<span class="chip accent">专家 · deep think</span>'
+              : '<span class="chip ok">快速</span>') +
+            "</td>" +
+            '<td class="num">' +
+            esc(fmtNum(m.context)) +
+            "</td>" +
+            "<td>" +
+            (m.reasoning ? "是" : "—") +
+            "</td>" +
+            "<td>" +
+            (m.needLogin ? "是" : "否") +
+            "</td>" +
+            "</tr>",
+        )
+        .join("")
+    : '<tr><td colspan="6"><div class="empty"><b>没有模型</b><p>点「获取模型」从 Dola 公共网页资源读取。</p></div></td></tr>';
+
+  const st = state.modelStatus || {};
+  const source = st.source === "live" ? "实时 · Dola 网页" : "内置列表";
+  $("#modelSourcePill").textContent = source;
+  $("#modelSourcePill").className = "pill" + (st.source === "live" ? "" : " muted");
+  $("#modelStatusText").textContent = st.fetchedAt
+    ? "上次获取 " + fmtTime(new Date(st.fetchedAt).toISOString())
+    : "尚未获取";
+  const next = st.nextAt ? new Date(st.nextAt) : null;
+  $("#modelStatusBody").innerHTML =
+    kv("来源", st.source === "live" ? "Dola 公共网页资源（静态 bundle）" : "内置 Fast/Pro") +
+    kv("上次获取", st.fetchedAt ? fmtTime(new Date(st.fetchedAt).toISOString()) : "—") +
+    kv("下次可获取", next ? fmtTime(next.toISOString()) : "—") +
+    kv("缓存", (st.cacheSeconds || 300) + " 秒") +
+    kv("Bundle", st.bundleUrl || "—") +
+    (st.error ? '<div class="warn-box" style="margin-top:12px">上次获取失败：' + esc(st.error) + "</div>" : "") +
+    '<div class="form-hint" style="margin-top:12px">获取只读取 dola.com 的公开页面与 JS bundle，不发送账号 Cookie，也不调用对话接口；5 分钟内重复点击直接使用缓存。</div>';
+}
+
+async function refreshModels() {
+  const btn = $("#refreshModelsBtn");
+  const before = state.modelStatus?.fetchedAt || 0;
+  btn.disabled = true;
+  btn.textContent = "获取中…";
+  try {
+    const d = await api("/api/models/refresh", { method: "POST" });
+    state.models = d.models || [];
+    state.modelStatus = d;
+    renderModels();
+    if (d.error) toast("获取失败，继续使用上一版：" + d.error, "bad");
+    else if (d.fetchedAt === before && d.nextAt > Date.now()) toast("5 分钟内已获取过，使用缓存", "warn");
+    else toast("模型已更新");
+  } catch (e) {
+    toast(e.message, "bad");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "获取模型";
+  }
 }
 
 /* ---------- accounts ---------- */
@@ -930,6 +1084,13 @@ function renderRequests() {
 /* ---------- keys ---------- */
 async function loadKeys() {
   try {
+    if (!state.models.length) {
+      try {
+        const m = await api("/api/models");
+        state.models = m.models || [];
+        state.modelStatus = m;
+      } catch {}
+    }
     const d = await api("/api/keys");
     state.keys = d.keys || [];
     renderKeys();
@@ -949,16 +1110,19 @@ function renderKeys() {
     body.innerHTML = '<tr><td colspan="6"><div class="empty"><b>还没有 API Key</b><p>新建一个 Key 给客户端使用。</p><button class="btn primary sm" onclick="openCreateKey()">新建 Key</button></div></td></tr>';
   } else {
     body.innerHTML = state.keys.map((k) => {
-      const models = k.models && k.models.length ? k.models.join(", ") : "全部";
+      const models = k.models && k.models.length
+        ? k.models.map((m) => '<span class="chip">' + esc(m) + "</span>").join(" ")
+        : '<span class="chip muted">全部</span>';
       return "<tr>" +
         "<td><b>" + esc(k.name) + "</b></td>" +
         "<td><span class=\"mono-sm\" id=\"key-" + k.id + "\">" + esc(maskKey(k.key)) + "</span> " +
         "<button class=\"btn link sm\" onclick=\"revealKey('" + k.id + "')\">显示</button> " +
         "<button class=\"btn link sm\" onclick=\"copyText(state.keys.find(x=>x.id==='" + k.id + "').key,'API Key')\">复制</button></td>" +
-        "<td class=\"muted\">" + esc(models) + "</td>" +
+        "<td>" + models + "</td>" +
         "<td>" + (k.enabled === false ? '<span class="chip muted">已停用</span>' : '<span class="chip ok">启用</span>') + "</td>" +
         "<td class=\"muted\">" + esc(fmtTime(k.createdAt)) + "</td>" +
         "<td><div class=\"row\">" +
+        "<button class=\"btn sm\" onclick=\"editKey('" + k.id + "')\">编辑</button>" +
         "<button class=\"btn sm\" onclick=\"toggleKey('" + k.id + "'," + (k.enabled === false) + ")\">" + (k.enabled === false ? "启用" : "停用") + "</button>" +
         "<button class=\"btn sm danger\" onclick=\"removeKey('" + k.id + "')\">删除</button>" +
         "</div></td></tr>";
@@ -983,14 +1147,14 @@ function revealKey(id) {
 function openCreateKey() {
   openModal("新建 API Key", `
     <div class="field"><label for="keyName">名称</label><input class="input" id="keyName" placeholder="例如：laptop / claude-code"></div>
-    <div class="field"><label for="keyModels">模型限制（逗号分隔，留空=全部）</label>
-      <input class="input" id="keyModels" placeholder="dola-fast, dola-pro">
-      <div class="form-hint">支持通配符，例如 <code>dola-*</code>。</div>
+    <div class="field"><label>可用模型（不选 = 全部）</label>
+      <div class="check-grid" id="keyModels">${modelCheckboxes([])}</div>
+      <div class="form-hint">只允许这个 Key 调用勾选的模型；不勾选表示全部模型。</div>
     </div>
     <div id="keyError" class="form-error"></div>
   `, async () => {
     const name = $("#keyName").value.trim();
-    const models = $("#keyModels").value.split(",").map((s) => s.trim()).filter(Boolean);
+    const models = checkedModels("#keyModels");
     try {
       await api("/api/keys", { method: "POST", body: { name, models } });
       closeModal();
@@ -1002,6 +1166,33 @@ function openCreateKey() {
       return false;
     }
   }, "创建");
+}
+
+function editKey(id) {
+  const k = state.keys.find((x) => x.id === id);
+  if (!k) return;
+  openModal("编辑 API Key", `
+    <div class="field"><label for="editKeyName">名称</label><input class="input" id="editKeyName" value="${esc(k.name)}"></div>
+    <div class="field"><label>可用模型（不选 = 全部）</label>
+      <div class="check-grid" id="editKeyModels">${modelCheckboxes(k.models || [])}</div>
+      <div class="form-hint">修改后立即生效；已连接的客户端下一次请求就会受新限制。</div>
+    </div>
+    <div id="editKeyError" class="form-error"></div>
+  `, async () => {
+    try {
+      await api("/api/keys/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: { name: $("#editKeyName").value, models: checkedModels("#editKeyModels") },
+      });
+      closeModal();
+      toast("Key 已更新");
+      loadKeys();
+      return true;
+    } catch (e) {
+      $("#editKeyError").textContent = e.message;
+      return false;
+    }
+  }, "保存");
 }
 
 async function toggleKey(id, enable) {
@@ -1187,6 +1378,12 @@ function fmtMs(ms) {
   const n = Number(ms) || 0;
   if (n < 1000) return n + " ms";
   return (n / 1000).toFixed(n < 10000 ? 1 : 0) + " s";
+}
+
+function fmtNum(n) {
+  const x = Number(n) || 0;
+  if (x >= 1000) return (x / 1000).toFixed(x % 1000 ? 1 : 0) + "k";
+  return String(x);
 }
 
 function toggleTheme() {
