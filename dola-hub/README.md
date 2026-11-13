@@ -87,6 +87,23 @@ The API key allowlist is built from this catalog: when creating or editing a
 key, tick the models it may use (none = all). `GET /v1/models` returns only
 the models the key is allowed to use.
 
+### Why only Doubao?
+
+The web chat bundle's `uF` list has exactly two entries: **豆包 快速** and
+**豆包 专家**. The bundle also contains task/office models — **豆包 2.1
+Lite**, **豆包 2.1 Pro** and **自动** — under `uB` / `uU` / `uz`. They use a
+different request mode (office/creation) and the chat completion endpoint
+does not select them with `need_deep_think`, so the dashboard lists them
+under **网页 bundle 中的其他模型** as **未接入**.
+
+The web bundle has **no DeepSeek, GLM or Kimi chat models**. Those may appear
+in the desktop app's model menu (the separate
+[`packages/doubao-work`](../packages/doubao-work) provider reads that menu),
+or as third-party models you added with your own API key; they are not
+selectable through this web endpoint as implemented. If your Dola web account
+shows another model, capture the request's `client_meta` / `option` fields
+and it can be added.
+
 ## Rotation
 
 Every request picks an account from the pool:

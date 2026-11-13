@@ -68,6 +68,35 @@ export function extractArray(source, name) {
   return null
 }
 
+// extractObject finds `name={…}` in a JS bundle and returns the object text.
+export function extractObject(source, name) {
+  const match = new RegExp(name + "\\s*=\\s*\\{").exec(source)
+  if (!match) return null
+  let i = match.index + match[0].length - 1
+  let depth = 0
+  let quote = null
+  let esc = false
+  for (; i < source.length; i++) {
+    const c = source[i]
+    if (quote) {
+      if (esc) esc = false
+      else if (c === "\\") esc = true
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      quote = c
+      continue
+    }
+    if (c === "{" || c === "[") depth++
+    else if (c === "}" || c === "]") {
+      depth--
+      if (depth === 0) return source.slice(match.index + match[0].length - 1, i + 1)
+    }
+  }
+  return null
+}
+
 // topLevelObjects splits `[{…},{…}]` into its top-level object literals.
 export function topLevelObjects(arrayText) {
   const out = []
@@ -155,6 +184,44 @@ export function parseBundleModels(bundle) {
   return models
 }
 
+// parseTaskModels reads the 工作任务 / office entries (uB, uU, uz). They are
+// real models in the web bundle but the chat completion endpoint does not
+// select them with need_deep_think, so the hub lists them as not connected.
+export function parseTaskModels(bundle) {
+  const out = []
+  const seen = new Set()
+  for (const name of ["uB", "uU", "uz"]) {
+    const entry = extractObject(bundle, name)
+    if (!entry) continue
+    const key = field(entry, "model_item_key")
+    const label = field(entry, "name")
+    if (!label || seen.has(label)) continue
+    seen.add(label)
+    const mode = field(entry, "default_mode")
+    const modes = (entry.match(/conversation_mode_list\s*:\s*\[([^\]]*)\]/) || [])[1] || ""
+    out.push({
+      id: "task-" + (key || label),
+      name: label,
+      modelItemKey: key,
+      mode,
+      conversationModes: modes.replace(/["\s]/g, ""),
+      needLogin: /need_login\s*:\s*(!0|true)/.test(entry),
+      supported: false,
+      reason: "web chat completion only selects Fast/Pro via need_deep_think",
+    })
+  }
+  return out
+}
+
+// parseBundleCatalog returns the supported chat models and the other web
+// models that are visible in the bundle but not connected.
+export function parseBundleCatalog(bundle) {
+  return {
+    models: parseBundleModels(bundle),
+    otherModels: parseTaskModels(bundle),
+  }
+}
+
 async function fetchText(fetchImpl, url, timeoutMs) {
   const res = await fetchImpl(url, {
     headers: {
@@ -180,7 +247,7 @@ export async function fetchLiveModels({ fetchImpl = globalThis.fetch } = {}) {
   if (!src) throw new Error("chat bundle not found in the Dola page")
   const bundleUrl = new URL(src, PAGE_URL).href
   const bundle = await fetchText(fetchImpl, bundleUrl, 20000)
-  return { models: parseBundleModels(bundle), bundleUrl }
+  return { ...parseBundleCatalog(bundle), bundleUrl }
 }
 
 export function createModelCatalog({
@@ -190,6 +257,7 @@ export function createModelCatalog({
 } = {}) {
   let state = {
     models: copyModels(BUILTIN_MODELS),
+    otherModels: [],
     source: "builtin",
     fetchedAt: 0,
     error: "",
@@ -200,6 +268,7 @@ export function createModelCatalog({
   function snapshot() {
     return {
       models: copyModels(state.models),
+      otherModels: state.otherModels.map((m) => ({ ...m })),
       source: state.source,
       fetchedAt: state.fetchedAt,
       nextAt: state.fetchedAt ? state.fetchedAt + cacheMs : 0,
@@ -215,9 +284,10 @@ export function createModelCatalog({
     if (!force && state.fetchedAt && now() < state.fetchedAt + cacheMs) return Promise.resolve(snapshot())
     inflight = (async () => {
       try {
-        const { models, bundleUrl } = await fetchLiveModels({ fetchImpl })
+        const { models, otherModels, bundleUrl } = await fetchLiveModels({ fetchImpl })
         state = {
           models,
+          otherModels,
           source: "live",
           fetchedAt: now(),
           error: "",

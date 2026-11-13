@@ -443,6 +443,18 @@
           </div>
         </div>
         <div class="panel">
+          <div class="panel-head"><h3>网页 bundle 中的其他模型</h3><span class="spacer"></span><span class="dim">未接入</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>名称</th><th>model_item_key</th><th>模式</th><th>状态</th></tr></thead>
+              <tbody id="otherModelsBody"></tbody>
+            </table>
+          </div>
+          <div class="panel-body">
+            <div class="form-hint">Dola 网页聊天接口当前只支持豆包 快速 / 专家。这些工作任务模型使用不同的请求模式，尚未接入；网页 bundle 中没有 DeepSeek / Kimi / GLM 的聊天模型。桌面端菜单可能另有模型（见 packages/doubao-work）。</div>
+          </div>
+        </div>
+        <div class="panel">
           <div class="panel-head"><h3>获取状态</h3></div>
           <div class="panel-body" id="modelStatusBody"></div>
         </div>
@@ -822,6 +834,22 @@ function renderModels() {
         )
         .join("")
     : '<tr><td colspan="6"><div class="empty"><b>没有模型</b><p>点「获取模型」从 Dola 公共网页资源读取。</p></div></td></tr>';
+
+  const other = state.modelStatus?.otherModels || [];
+  $("#otherModelsBody").innerHTML = other.length
+    ? other
+        .map(
+          (m) =>
+            "<tr><td><b>" +
+            esc(m.name) +
+            "</b></td><td class=\"mono-sm\">" +
+            esc(m.modelItemKey || "—") +
+            "</td><td class=\"muted\">" +
+            esc(m.conversationModes || m.mode || "—") +
+            "</td><td><span class=\"chip muted\">未接入</span></td></tr>",
+        )
+        .join("")
+    : '<tr><td colspan="4"><div class="empty" style="padding:18px"><b>没有其他模型</b><p>网页 bundle 中没有额外的工作任务模型。</p></div></td></tr>';
 
   const st = state.modelStatus || {};
   const source = st.source === "live" ? "实时 · Dola 网页" : "内置列表";

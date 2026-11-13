@@ -90,6 +90,13 @@ result for **five minutes**, and the manual **获取模型** button uses the sam
 cache. On failure the previous list is kept and the next attempt waits five
 minutes. If the bundle cannot be read, the built-in list is used.
 
+The bundle's other task/office models (豆包 2.1 Lite, 豆包 2.1 Pro, 自动) are
+shown as **未接入**; the chat endpoint does not select them with
+`need_deep_think`. The web bundle contains **no DeepSeek, GLM or Kimi chat
+models** — those belong to the desktop app's menu (see
+[`packages/doubao-work`](packages/doubao-work)) or third-party models added
+with your own API key.
+
 ## API keys and model allowlists
 
 Create or edit a key in **API Key**:
