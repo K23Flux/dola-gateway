@@ -1,0 +1,38 @@
+{
+  "name": "@magpie-community/opencode-dola-auth",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./opencode.mjs",
+  "exports": {
+    ".": "./opencode2.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "dola.mjs",
+    "browser.mjs",
+    "openai.mjs",
+    "prompt.mjs",
+    "opencode.mjs",
+    "opencode2.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "Dola (dola.com, the international Doubao) as an OpenAI-compatible provider: browser sign-in or a pasted cookie, Fast and Pro models, and several accounts rotating through magpie's routing",
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "opencode",
+    "opencode-plugin",
+    "dola",
+    "doubao"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/magpie-community/plugins.git",
+    "directory": "packages/dola"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

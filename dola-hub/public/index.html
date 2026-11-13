@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dola Hub · 网关控制台</title>
+<style>
+  :root{
+    --bg:#efebe0; --panel:#ffffff; --panel2:#e9e5d6; --panel3:#e0dbc9;
+    --line:#d5cfbc; --line-hover:#c5bfab;
+    --fg:#1f1e1b; --dim:#625f57; --dim-light:#87847a;
+    --accent:#a14427; --accent-hover:#8a3a20; --accent-soft:rgba(161,68,39,.09);
+    --accent2:#497035; --accent2-soft:rgba(73,112,53,.12);
+    --warn:#a0691c; --warn-soft:rgba(183,121,31,.12);
+    --bad:#b5473b; --bad-soft:rgba(181,71,59,.09);
+    --shadow:0 1px 2px rgba(31,30,27,.05),0 4px 14px rgba(31,30,27,.04);
+    --shadow-md:0 2px 6px rgba(31,30,27,.06),0 12px 32px rgba(31,30,27,.09);
+    --radius:12px; --radius-sm:8px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+    --serif:ui-serif,Georgia,"Source Han Serif SC","Noto Serif SC","Songti SC",serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    color-scheme:light;
+  }
+  [data-theme="dark"]{
+    --bg:#1f1e1b; --panel:#2d2c25; --panel2:#38362f; --panel3:#433f37;
+    --line:#4f4b42; --line-hover:#5d584e;
+    --fg:#edebe3; --dim:#a5a29a; --dim-light:#7c796f;
+    --accent:#e88a68; --accent-hover:#f0967a; --accent-soft:rgba(232,138,104,.14);
+    --accent2:#8fae78; --accent2-soft:rgba(143,174,120,.15);
+    --warn:#d9b25f; --warn-soft:rgba(217,178,95,.15);
+    --bad:#d97b72; --bad-soft:rgba(217,123,114,.15);
+    --shadow:0 1px 2px rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.25);
+    --shadow-md:0 2px 6px rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.4);
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre,.mono{font-family:var(--mono)}
+  ::selection{background:var(--accent-soft)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line-hover);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  [hidden]{display:none!important}
+
+  /* login */
+  .gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{width:min(380px,100%);background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:30px 28px;box-shadow:var(--shadow-md)}
+  .brand-mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),#c86a45);color:#fff;font-weight:750;font-size:18px;letter-spacing:-.5px}
+  .login-card h1{margin:16px 0 4px;font-family:var(--serif);font-size:24px;font-weight:650;letter-spacing:.01em}
+  .login-card p{margin:0 0 18px;color:var(--dim);font-size:13px}
+  .field{display:grid;gap:6px;margin-bottom:14px}
+  .field label{font-size:12px;font-weight:650;color:var(--dim);letter-spacing:.02em}
+  .input,.select,.textarea{
+    width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);
+    padding:9px 11px;color:var(--fg);font-size:13.5px;transition:border-color .15s,background .15s;
+  }
+  .input:focus,.select:focus,.textarea:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+  .textarea{min-height:110px;resize:vertical;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+  .form-error{min-height:18px;color:var(--bad);font-size:12.5px;margin:2px 0 10px}
+  .hint{font-size:12px;color:var(--warn);background:var(--warn-soft);border:1px solid rgba(183,121,31,.25);border-radius:8px;padding:8px 10px;margin-top:14px;line-height:1.5}
+
+  /* shell */
+  #app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+  .sidebar{
+    position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;
+    background:var(--panel);border-right:1px solid var(--line);padding:18px 14px 14px;z-index:30;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:2px 8px 16px}
+  .brand-text{display:flex;flex-direction:column;line-height:1.25}
+  .brand-text b{font-size:14px;font-weight:750;letter-spacing:-.1px}
+  .brand-text span{font-size:10.5px;color:var(--dim-light);letter-spacing:.08em;text-transform:uppercase}
+  .nav-label{font-size:10.5px;font-weight:700;color:var(--dim-light);letter-spacing:.1em;text-transform:uppercase;padding:10px 10px 4px}
+  .nav{display:grid;gap:2px}
+  .nav button{
+    display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:1px solid transparent;
+    border-radius:8px;background:transparent;color:var(--dim);font-size:13.5px;text-align:left;
+    transition:background .15s,color .15s,border-color .15s;
+  }
+  .nav button svg{width:17px;height:17px;flex:0 0 17px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .nav button:hover{background:var(--panel2);color:var(--fg)}
+  .nav button.active{background:var(--accent-soft);color:var(--accent);border-color:rgba(161,68,39,.18);font-weight:650}
+  .nav button.active svg{stroke:var(--accent)}
+  .side-foot{margin-top:auto;padding:12px 10px 2px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim-light);display:grid;gap:7px}
+  .side-status{display:flex;align-items:center;gap:7px;color:var(--dim)}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 0 3px var(--accent2-soft);flex:0 0 8px}
+  .side-link{background:none;border:0;padding:0;color:var(--dim);font-size:11.5px;text-align:left}
+  .side-link:hover{color:var(--accent);text-decoration:underline}
+
+  .sidebar-backdrop{display:none}
+  .main{min-width:0;display:flex;flex-direction:column}
+  .topbar{
+    position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+    padding:14px 26px;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+  }
+  .menu-btn{display:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;width:36px;height:36px;align-items:center;justify-content:center}
+  .menu-btn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+  .page-heading{display:flex;flex-direction:column;min-width:0}
+  .page-heading h1{margin:0;font-family:var(--serif);font-size:20px;font-weight:650;letter-spacing:.01em;white-space:nowrap}
+  .page-heading p{margin:1px 0 0;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--dim);white-space:nowrap}
+  .icon-btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;width:34px;height:34px;display:grid;place-items:center;color:var(--dim)}
+  .icon-btn:hover{color:var(--fg);border-color:var(--line-hover)}
+  .icon-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+  .content{width:100%;max-width:1500px;margin:0 auto;padding:22px 26px 70px}
+  .page{display:grid;gap:18px}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .page-head h2{margin:0;font-family:var(--serif);font-size:19px;font-weight:650;letter-spacing:.01em}
+  .page-head p{margin:3px 0 0;color:var(--dim);font-size:12.5px}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .spacer{flex:1}
+
+  /* cards */
+  .stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow);min-width:0}
+  .stat .k{font-size:11.5px;color:var(--dim);font-weight:650;letter-spacing:.03em}
+  .stat .v{font-size:25px;font-weight:750;letter-spacing:-.4px;font-variant-numeric:tabular-nums;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat .s{font-size:11.5px;color:var(--dim-light);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat.accent .v{color:var(--accent)}
+  .stat.good .v{color:var(--accent2)}
+  .stat.bad .v{color:var(--bad)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .panel-head h3{margin:0;font-size:13px;font-weight:700;letter-spacing:.02em}
+  .panel-head .dim{font-size:11.5px;color:var(--dim-light)}
+  .panel-body{padding:16px}
+  .two-col{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px}
+  .three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+
+  /* chart */
+  .bar-chart{display:flex;align-items:flex-end;gap:4px;height:130px;padding:4px 2px 0}
+  .bar-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+  .bar{width:100%;max-width:26px;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px;opacity:.82;transition:opacity .15s}
+  .bar-col:hover .bar{opacity:1}
+  .bar-col .tick{font-size:9.5px;color:var(--dim-light);margin-top:5px;white-space:nowrap}
+  .bar-col .tip{position:absolute;bottom:calc(100% + 4px);background:var(--fg);color:var(--bg);font-size:10.5px;padding:2px 6px;border-radius:5px;opacity:0;pointer-events:none;white-space:nowrap}
+  .bar-col:hover .tip{opacity:1}
+
+  /* table */
+  .table-wrap{width:100%;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.8px;font-variant-numeric:tabular-nums}
+  th,td{padding:10px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle;white-space:nowrap}
+  th{background:var(--panel2);color:var(--dim);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;position:sticky;top:0;z-index:1}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--panel2)}
+  td.wrap{white-space:normal;max-width:320px}
+  .mono-sm{font-family:var(--mono);font-size:11.8px}
+  .muted{color:var(--dim-light)}
+  .num{text-align:right}
+
+  /* chips */
+  .chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:650;border:1px solid var(--line);background:var(--panel2);color:var(--dim);white-space:nowrap}
+  .chip.ok{background:var(--accent2-soft);border-color:rgba(73,112,53,.28);color:var(--accent2)}
+  .chip.warn{background:var(--warn-soft);border-color:rgba(183,121,31,.28);color:var(--warn)}
+  .chip.bad{background:var(--bad-soft);border-color:rgba(181,71,59,.3);color:var(--bad)}
+  .chip.accent{background:var(--accent-soft);border-color:rgba(161,68,39,.25);color:var(--accent)}
+  .chip.muted{color:var(--dim-light)}
+
+  /* buttons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+  .btn:hover{background:var(--panel2);border-color:var(--line-hover)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+  .btn.danger{color:var(--bad);border-color:rgba(181,71,59,.35)}
+  .btn.danger:hover{background:var(--bad-soft)}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:4px 9px;font-size:11.5px;border-radius:7px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.link{background:none;border:0;padding:2px 4px;color:var(--accent);font-weight:600}
+
+  /* empty */
+  .empty{padding:38px 20px;text-align:center;color:var(--dim-light)}
+  .empty b{display:block;color:var(--dim);font-size:13.5px;margin-bottom:4px}
+  .empty p{margin:0 0 14px;font-size:12.5px}
+
+  /* forms */
+  .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .form-grid .full{grid-column:1/-1}
+  .form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+  .form-hint{font-size:11.5px;color:var(--dim-light);margin-top:2px;line-height:1.5}
+  .kv{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:12.5px;flex-wrap:wrap}
+  .kv:last-child{border-bottom:0}
+  .kv .k{width:96px;flex:0 0 96px;color:var(--dim);font-weight:600}
+  .kv code{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11.8px;word-break:break-all}
+  pre.code{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:13px 14px;font-size:11.8px;line-height:1.65;overflow:auto;margin:0}
+  .copy-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+  /* modal */
+  .modal-backdrop{position:fixed;inset:0;z-index:100;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal{width:min(540px,100%);max-height:min(86vh,760px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)}
+  .modal-head{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .modal-head h3{margin:0;font-size:14.5px;font-weight:700;flex:1}
+  .modal-body{padding:18px}
+  .modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;border-top:1px solid var(--line);background:var(--panel)}
+  .x-btn{background:none;border:0;color:var(--dim);font-size:20px;line-height:1;padding:0 4px}
+  .x-btn:hover{color:var(--fg)}
+
+  /* toast */
+  #toastRoot{position:fixed;right:18px;bottom:18px;z-index:200;display:grid;gap:8px;max-width:min(360px,calc(100vw - 36px))}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent2);border-radius:9px;padding:10px 13px;font-size:12.5px;box-shadow:var(--shadow-md);animation:toastIn .18s ease}
+  .toast.bad{border-left-color:var(--bad)}
+  .toast.warn{border-left-color:var(--warn)}
+  @keyframes toastIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* misc */
+  .acct-line{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+  .acct-line:last-child{border-bottom:0}
+  .acct-line .name{font-weight:650;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct-line .meta{color:var(--dim-light);font-size:11.5px}
+  .spinner{width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;display:inline-block;vertical-align:-2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .login-status{display:flex;align-items:flex-start;gap:9px;font-size:12.5px;color:var(--dim);line-height:1.6}
+  .login-status .spinner{flex:0 0 15px;margin-top:3px}
+  .warn-box{border:1px solid rgba(183,121,31,.3);background:var(--warn-soft);color:var(--warn);border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.55}
+  .bad-box{border:1px solid rgba(181,71,59,.3);background:var(--bad-soft);color:var(--bad);border-radius:9px;padding:10px 12px;font-size:12px;line-height:1.55}
+
+  @media (max-width:1100px){
+    .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .two-col{grid-template-columns:1fr}
+    .three-col{grid-template-columns:1fr}
+  }
+  @media (max-width:900px){
+    #app{grid-template-columns:1fr}
+    .sidebar{position:fixed;left:0;top:0;width:250px;transform:translateX(-100%);transition:transform .2s ease;box-shadow:var(--shadow-md)}
+    #app.nav-open .sidebar{transform:none}
+    .sidebar-backdrop{display:none;position:fixed;inset:0;z-index:25;background:rgba(15,23,42,.4)}
+    #app.nav-open .sidebar-backdrop{display:block}
+    .menu-btn{display:flex}
+    .topbar{padding:12px 16px}
+    .content{padding:18px 16px 60px}
+    .page-heading p{max-width:52vw}
+  }
+  @media (max-width:640px){
+    .stat-grid{grid-template-columns:1fr 1fr}
+    .form-grid{grid-template-columns:1fr}
+    .topbar .pill{display:none}
+    .page-heading h1{font-size:17px}
+    .page-heading p{max-width:46vw}
+    th,td{padding:9px 10px}
+  }
+</style>
+</head>
+<body>
+
+<!-- login gate -->
+<div id="loginGate" class="gate">
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <div class="brand-mark">D</div>
+    <h1>Dola Hub</h1>
+    <p>dola.com 的 OpenAI 兼容网关 · 账号池 · 请求看板</p>
+    <div class="field">
+      <label for="loginPassword">面板密码</label>
+      <input id="loginPassword" class="input" type="password" autocomplete="current-password" placeholder="输入面板密码" required>
+    </div>
+    <div id="loginError" class="form-error"></div>
+    <button class="btn primary" type="submit" style="width:100%;height:38px">进入面板</button>
+    <div id="defaultHint" class="hint" hidden>当前仍在使用默认密码 <b>admin</b>，登录后请在「设置」中修改。</div>
+  </form>
+</div>
+
+<!-- app -->
+<div id="app" hidden>
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand">
+      <div class="brand-mark">D</div>
+      <div class="brand-text"><b>Dola Hub</b><span>gateway console</span></div>
+    </div>
+    <div class="nav-label">工作台</div>
+    <nav class="nav" id="nav">
+      <button data-page="overview" class="active" onclick="navigate('overview')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        总览
+      </button>
+      <button data-page="accounts" onclick="navigate('accounts')">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c.4-3.2 2.4-5 5.5-5s5.1 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.5c2.7.2 4.3 1.8 4.8 4.5"/></svg>
+        账号
+      </button>
+      <button data-page="requests" onclick="navigate('requests')">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9l3 3-3 3M12.5 15H17"/></svg>
+        请求记录
+      </button>
+      <div class="nav-label">配置</div>
+      <button data-page="keys" onclick="navigate('keys')">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l3 3M14 9l2 2"/></svg>
+        API Key
+      </button>
+      <button data-page="settings" onclick="navigate('settings')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z"/></svg>
+        设置
+      </button>
+    </nav>
+    <div class="side-foot">
+      <div class="side-status"><span class="status-dot"></span><span>网关运行中</span></div>
+      <button class="side-link" onclick="logout()">退出登录</button>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleNav(false)"></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-btn" onclick="toggleNav()" aria-label="打开导航">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="page-heading">
+        <h1 id="pageTitle">总览</h1>
+        <p id="pageDesc">账号池、今日请求与最近调用</p>
+      </div>
+      <div class="spacer"></div>
+      <span class="pill"><span class="status-dot"></span><span id="topStatus">运行中</span></span>
+      <button class="icon-btn" onclick="toggleTheme()" title="切换主题" aria-label="切换主题">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn" onclick="refreshPage()" title="刷新当前页" aria-label="刷新当前页">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </header>
+
+    <main class="content">
+      <!-- overview -->
+      <section id="page-overview" class="page">
+        <div class="stat-grid">
+          <div class="stat"><div class="k">今日请求</div><div class="v" id="statRequests">0</div><div class="s" id="statRequestsSub">—</div></div>
+          <div class="stat good"><div class="k">成功率</div><div class="v" id="statRate">—</div><div class="s" id="statRateSub">今日</div></div>
+          <div class="stat accent"><div class="k">可用账号</div><div class="v" id="statAccounts">0</div><div class="s" id="statAccountsSub">—</div></div>
+          <div class="stat"><div class="k">平均耗时</div><div class="v" id="statLatency">—</div><div class="s" id="statInflight">—</div></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>今日请求分布</h3><span class="dim" id="chartRange"></span></div>
+          <div class="panel-body"><div class="bar-chart" id="hourlyChart"></div></div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-head"><h3>最近请求</h3><span class="spacer"></span><button class="btn link sm" onclick="navigate('requests')">全部</button></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>模型</th><th>账号</th><th>状态</th><th class="num">耗时</th></tr></thead>
+                <tbody id="recentBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>账号状态</h3><span class="spacer"></span><button class="btn link sm" onclick="navigate('accounts')">管理</button></div>
+            <div class="panel-body" id="overviewAccounts"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>接入信息</h3></div>
+          <div class="panel-body">
+            <div class="kv"><span class="k">Base URL</span><code id="baseUrl">—</code><button class="btn ghost sm" onclick="copyText(document.getElementById('baseUrl').textContent,'Base URL')">复制</button></div>
+            <div class="kv"><span class="k">API Key</span><code id="quickKey">—</code><button class="btn ghost sm" onclick="copyText(state.quickKey,'API Key')">复制</button></div>
+            <div class="kv"><span class="k">模型</span><code>dola-fast</code><code>dola-pro</code></div>
+            <pre class="code" id="curlExample" style="margin-top:12px"></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- accounts -->
+      <section id="page-accounts" class="page" hidden>
+        <div class="page-head">
+          <div><h2>账号池</h2><p>每个账号是一个 dola.com 登录会话；请求按设置的路由策略分配。</p></div>
+          <div class="row">
+            <button class="btn" onclick="openBrowserLogin()">浏览器登录</button>
+            <button class="btn primary" onclick="openAddAccount()">添加账号</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>账号</th><th>状态</th><th class="num">尝试</th><th class="num">成功率</th><th>最近使用</th><th class="num">并发</th><th>操作</th></tr></thead>
+              <tbody id="accountsBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="accountsEmpty"></div>
+      </section>
+
+      <!-- requests -->
+      <section id="page-requests" class="page" hidden>
+        <div class="page-head">
+          <div><h2>请求记录</h2><p>每次网关调用一条，保留最近 500 条；不记录提示词与 Cookie。</p></div>
+          <div class="row">
+            <select class="select" id="filterStatus" style="width:auto" onchange="loadRequests()">
+              <option value="">全部状态</option>
+              <option value="ok">成功</option>
+              <option value="error">失败</option>
+            </select>
+            <select class="select" id="filterModel" style="width:auto" onchange="loadRequests()">
+              <option value="">全部模型</option>
+              <option value="dola-fast">dola-fast</option>
+              <option value="dola-pro">dola-pro</option>
+            </select>
+            <button class="btn" onclick="loadRequests()">刷新</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>时间</th><th>Key</th><th>模型</th><th>账号</th><th>状态</th><th class="num">耗时</th><th class="num">Tokens</th><th>说明</th></tr></thead>
+              <tbody id="requestsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- keys -->
+      <section id="page-keys" class="page" hidden>
+        <div class="page-head">
+          <div><h2>API Key</h2><p>客户端用 Bearer Key 调用 <code>/v1</code>；可限制每个 Key 能用的模型。</p></div>
+          <button class="btn primary" onclick="openCreateKey()">新建 Key</button>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>名称</th><th>Key</th><th>模型限制</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+              <tbody id="keysBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>调用示例</h3></div>
+          <div class="panel-body">
+            <pre class="code" id="keysExample"></pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- settings -->
+      <section id="page-settings" class="page" hidden>
+        <div class="page-head"><div><h2>设置</h2><p>路由、冷却、会话粘性与上游参数。保存后立即生效。</p></div></div>
+        <div class="panel">
+          <div class="panel-head"><h3>路由与上游</h3></div>
+          <div class="panel-body">
+            <form id="settingsForm" class="form-grid">
+              <div class="field"><label for="setStrategy">轮询策略</label>
+                <select class="select" id="setStrategy">
+                  <option value="round_robin">round_robin · 加权轮询</option>
+                  <option value="least_inflight">least_inflight · 最少并发</option>
+                  <option value="priority">priority · 优先级</option>
+                  <option value="random">random · 加权随机</option>
+                </select>
+              </div>
+              <div class="field"><label for="setAttempts">单请求最多尝试账号数</label><input class="input" id="setAttempts" type="number" min="1" max="10"></div>
+              <div class="field"><label for="setCooldown">失败冷却基数（秒）</label><input class="input" id="setCooldown" type="number" min="5" max="3600"></div>
+              <div class="field"><label for="setSticky">会话粘性 TTL（秒，0 关闭）</label><input class="input" id="setSticky" type="number" min="0" max="86400"></div>
+              <div class="field"><label for="setRegion">Dola region</label><input class="input" id="setRegion" placeholder="AU"></div>
+              <div class="field"><label for="setLanguage">Dola language</label><input class="input" id="setLanguage" placeholder="en"></div>
+              <div class="field"><label for="setBotId">Bot ID</label><input class="input" id="setBotId" placeholder="7339470689562525703"></div>
+              <div class="field"><label for="setConcurrency">每账号并发上限</label><input class="input" id="setConcurrency" type="number" min="1" max="50"></div>
+              <div class="full form-actions"><button class="btn primary" type="submit">保存设置</button></div>
+            </form>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-head"><h3>面板密码</h3></div>
+            <div class="panel-body">
+              <form id="passwordForm">
+                <div class="field"><label for="pwdCurrent">当前密码</label><input class="input" id="pwdCurrent" type="password" autocomplete="current-password"></div>
+                <div class="field"><label for="pwdNext">新密码（至少 6 位）</label><input class="input" id="pwdNext" type="password" autocomplete="new-password"></div>
+                <div class="form-actions"><button class="btn" type="submit">修改密码</button></div>
+              </form>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h3>运行信息</h3></div>
+            <div class="panel-body" id="serverInfo"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h3>维护</h3></div>
+          <div class="panel-body">
+            <div class="row"><button class="btn danger" onclick="resetStats()">清零账号与 Key 统计</button><span class="form-hint">只清空计数，不删除账号、Key 或请求记录。</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+const state = {
+  page: "overview",
+  overview: null,
+  accounts: [],
+  requests: [],
+  keys: [],
+  settings: null,
+  quickKey: "",
+  timer: null,
+  loginTimer: null,
+};
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nowMs = () => Date.now();
+
+async function api(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  let body = opts.body;
+  if (body !== undefined && typeof body !== "string") {
+    headers["content-type"] = "application/json";
+    body = JSON.stringify(body);
+  }
+  const res = await fetch(path, { ...opts, headers, body, credentials: "same-origin" });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (res.status === 401 && !path.endsWith("/login")) {
+    showLogin();
+    throw new Error("登录已失效，请重新登录");
+  }
+  if (!res.ok) throw new Error(data?.error?.message || data?.message || res.statusText || "请求失败");
+  return data;
+}
+
+/* ---------- auth ---------- */
+async function boot() {
+  try {
+    const s = await api("/api/session");
+    if (s.authenticated) enterApp(s);
+    else showLogin(s);
+  } catch {
+    showLogin();
+  }
+}
+
+function showLogin(s = {}) {
+  clearInterval(state.timer);
+  state.timer = null;
+  $("#app").hidden = true;
+  $("#loginGate").hidden = false;
+  $("#defaultHint").hidden = !s.defaultPassword;
+  setTimeout(() => $("#loginPassword").focus(), 30);
+}
+
+function enterApp(s = {}) {
+  $("#loginGate").hidden = true;
+  $("#app").hidden = false;
+  $("#defaultHint").hidden = true;
+  window.scrollTo(0, 0);
+  navigate(state.page || "overview");
+}
+
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.submitter || $("#loginForm button[type=submit]");
+  const password = $("#loginPassword").value;
+  $("#loginError").textContent = "";
+  btn.disabled = true;
+  try {
+    const r = await api("/api/login", { method: "POST", body: { password } });
+    $("#loginPassword").value = "";
+    enterApp(r);
+  } catch (err) {
+    $("#loginError").textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function logout() {
+  try { await api("/api/logout", { method: "POST" }); } catch {}
+  showLogin();
+}
+
+/* ---------- navigation ---------- */
+const PAGES = {
+  overview: { title: "总览", desc: "账号池、今日请求与最近调用" },
+  accounts: { title: "账号", desc: "添加、测试与启停 Dola 账号" },
+  requests: { title: "请求记录", desc: "最近的网关调用与错误" },
+  keys: { title: "API Key", desc: "客户端密钥与模型权限" },
+  settings: { title: "设置", desc: "路由、冷却与上游参数" },
+};
+
+function navigate(page) {
+  if (!PAGES[page]) page = "overview";
+  state.page = page;
+  for (const b of $$("#nav button")) b.classList.toggle("active", b.dataset.page === page);
+  for (const p of $$(".page")) p.hidden = p.id !== "page-" + page;
+  $("#pageTitle").textContent = PAGES[page].title;
+  $("#pageDesc").textContent = PAGES[page].desc;
+  toggleNav(false);
+  refreshPage();
+  clearInterval(state.timer);
+  state.timer = setInterval(() => {
+    if (document.hidden) return;
+    if (state.page === "overview") loadOverview(true);
+    else if (state.page === "requests") loadRequests(true);
+  }, 5000);
+}
+
+function refreshPage() {
+  if (state.page === "overview") loadOverview();
+  else if (state.page === "accounts") loadAccounts();
+  else if (state.page === "requests") loadRequests();
+  else if (state.page === "keys") loadKeys();
+  else if (state.page === "settings") loadSettings();
+}
+
+function toggleNav(force) {
+  const app = $("#app");
+  const open = force === undefined ? !app.classList.contains("nav-open") : force;
+  app.classList.toggle("nav-open", open);
+}
+
+/* ---------- overview ---------- */
+async function loadOverview(silent = false) {
+  try {
+    const [d, k] = await Promise.all([
+      api("/api/overview"),
+      api("/api/keys").catch(() => ({ keys: [] })),
+    ]);
+    state.overview = d;
+    state.keys = k.keys || [];
+    renderOverview(d);
+  } catch (e) {
+    if (!silent) toast(e.message, "bad");
+  }
+}
+
+function renderOverview(d) {
+  $("#statRequests").textContent = d.requestsToday ?? 0;
+  $("#statRequestsSub").textContent = (d.failureToday ?? 0) + " 次失败";
+  $("#statRate").textContent = d.requestsToday ? Math.round((d.successRate || 0) * 100) + "%" : "—";
+  $("#statRateSub").textContent = (d.successToday ?? 0) + " 成功 / " + (d.requestsToday ?? 0) + " 次";
+  $("#statAccounts").textContent = d.activeAccounts ?? 0;
+  $("#statAccountsSub").textContent = "共 " + (d.totalAccounts ?? 0) + " 个账号";
+  $("#statLatency").textContent = d.avgLatencyMs ? fmtMs(d.avgLatencyMs) : "—";
+  $("#statInflight").textContent = (d.inflight ?? 0) + " 个请求处理中";
+
+  renderChart(d.hourly || []);
+  renderRecent(d.recent || []);
+  renderOverviewAccounts(d.accounts || []);
+
+  const base = d.settings?.server?.baseUrl || location.origin + "/v1";
+  $("#baseUrl").textContent = base;
+  const key = (state.keys && state.keys[0]?.key) || "";
+  state.quickKey = key;
+  $("#quickKey").textContent = key ? maskKey(key) : "在 API Key 页创建";
+  $("#curlExample").textContent =
+    "curl " + base + "/chat/completions \\\n" +
+    "  -H \"Authorization: Bearer " + (key ? maskKey(key) : "sk-dola-…") + "\" \\\n" +
+    "  -H \"Content-Type: application/json\" \\\n" +
+    "  -d '{\"model\":\"dola-fast\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}'";
+}
+
+function renderChart(hourly) {
+  const chart = $("#hourlyChart");
+  const max = Math.max(1, ...hourly);
+  const nowHour = new Date().getHours();
+  chart.innerHTML = hourly.map((n, h) => {
+    const hPct = Math.max(2, Math.round((n / max) * 100));
+    const label = h % 6 === 0 ? String(h).padStart(2, "0") : "";
+    return '<div class="bar-col" title="' + h + ':00 · ' + n + ' 次">' +
+      '<div class="tip">' + h + ':00 · ' + n + ' 次</div>' +
+      '<div class="bar" style="height:' + hPct + '%;' + (h === nowHour ? "background:var(--accent2)" : "") + '"></div>' +
+      '<div class="tick">' + label + '</div></div>';
+  }).join("");
+  $("#chartRange").textContent = "00:00 — 23:00 · 本地时间";
+}
+
+function renderRecent(list) {
+  const body = $("#recentBody");
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="5"><div class="empty" style="padding:20px"><b>还没有请求</b><p>用 API Key 调用一次后，这里会出现记录。</p></div></td></tr>';
+    return;
+  }
+  body.innerHTML = list.map((r) => {
+    const ok = Number(r.status) < 400;
+    return "<tr>" +
+      "<td class=\"muted\">" + esc(fmtTime(r.ts)) + "</td>" +
+      "<td class=\"mono-sm\">" + esc(r.model) + "</td>" +
+      "<td class=\"mono-sm\">" + esc(r.account || "—") + "</td>" +
+      "<td>" + (ok ? '<span class="chip ok">' + esc(r.status) + '</span>' : '<span class="chip bad">' + esc(r.status) + '</span>') + "</td>" +
+      "<td class=\"num\">" + esc(fmtMs(r.durationMs)) + "</td>" +
+      "</tr>";
+  }).join("");
+}
+
+function renderOverviewAccounts(accounts) {
+  const box = $("#overviewAccounts");
+  if (!accounts.length) {
+    box.innerHTML = '<div class="empty" style="padding:22px"><b>还没有账号</b><p>先添加一个 Dola 登录会话。</p><button class="btn primary sm" onclick="navigate(\'accounts\')">去添加</button></div>';
+    return;
+  }
+  box.innerHTML = accounts.slice(0, 8).map((a) => {
+    const st = accountStatus(a);
+    return '<div class="acct-line"><span class="name">' + esc(a.name || a.accountId) + '</span>' +
+      '<span class="chip ' + st.cls + '">' + esc(st.label) + '</span>' +
+      '<span class="meta">' + (a.inflight ? a.inflight + " 并发" : "") + '</span></div>';
+  }).join("");
+}
+
+/* ---------- accounts ---------- */
+async function loadAccounts() {
+  try {
+    const d = await api("/api/accounts");
+    state.accounts = d.accounts || [];
+    renderAccounts();
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+function accountStatus(a) {
+  if (a.enabled === false) return { label: "已停用", cls: "muted" };
+  if (a.invalid) return { label: "登录失效", cls: "bad" };
+  if (Number(a.cooldownUntil) > nowMs()) return { label: "冷却中", cls: "warn" };
+  if (Number(a.inflight) > 0) return { label: "处理中", cls: "accent" };
+  return { label: "可用", cls: "ok" };
+}
+
+function renderAccounts() {
+  const body = $("#accountsBody");
+  const empty = $("#accountsEmpty");
+  if (!state.accounts.length) {
+    body.innerHTML = "";
+    empty.innerHTML = '<div class="panel"><div class="empty"><b>账号池是空的</b><p>点「添加账号」粘贴 Cookie，或在有桌面环境的机器上用「浏览器登录」。</p><button class="btn primary sm" onclick="openAddAccount()">添加账号</button></div></div>';
+    return;
+  }
+  empty.innerHTML = "";
+  body.innerHTML = state.accounts.map((a) => {
+    const st = accountStatus(a);
+    const total = a.stats?.success + a.stats?.failure;
+    const rate = total ? Math.round((a.stats.success / total) * 100) + "%" : "—";
+    return "<tr>" +
+      "<td><div style=\"font-weight:650\">" + esc(a.name || a.accountId) + "</div><div class=\"muted mono-sm\">" + esc(a.accountId) + "</div></td>" +
+      "<td><span class=\"chip " + st.cls + "\">" + esc(st.label) + "</span></td>" +
+      "<td class=\"num\">" + esc(a.stats?.requests ?? 0) + "</td>" +
+      "<td class=\"num\">" + rate + "</td>" +
+      "<td class=\"muted\">" + esc(a.lastUsedAt ? fmtTime(a.lastUsedAt) : "—") + "</td>" +
+      "<td class=\"num\">" + esc(a.inflight ?? 0) + " / " + esc(a.maxConcurrency ?? 1) + "</td>" +
+      "<td><div class=\"row\">" +
+      "<button class=\"btn sm\" onclick=\"editAccount('" + a.id + "')\">编辑</button>" +
+      "<button class=\"btn sm\" onclick=\"testAccount('" + a.id + "')\">测试</button>" +
+      "<button class=\"btn sm\" onclick=\"toggleAccount('" + a.id + "'," + (a.enabled === false) + ")\">" + (a.enabled === false ? "启用" : "停用") + "</button>" +
+      "<button class=\"btn sm danger\" onclick=\"removeAccount('" + a.id + "')\">删除</button>" +
+      "</div></td>" +
+      "</tr>";
+  }).join("");
+}
+
+function openAddAccount() {
+  openModal("添加 Dola 账号", `
+    <div class="field"><label for="acctName">名称（可选）</label><input class="input" id="acctName" placeholder="例如：主号 / 小号 1"></div>
+    <div class="field"><label for="acctCookie">Cookie</label>
+      <textarea class="textarea" id="acctCookie" placeholder="登录 dola.com 后，从任意请求的 Cookie 请求头复制整段：
+sessionid=…; oauth_token=…; flow_cur_user_sec_id=…; …"></textarea>
+      <div class="form-hint">Cookie 等同于账号密码，只保存在本机 data/state.json，不会写进日志。</div>
+    </div>
+    <div id="acctError" class="form-error"></div>
+  `, async () => {
+    const cookie = $("#acctCookie").value.trim();
+    const name = $("#acctName").value.trim();
+    if (!cookie) { $("#acctError").textContent = "请粘贴 Cookie"; return false; }
+    try {
+      const r = await api("/api/accounts", { method: "POST", body: { cookie, name } });
+      closeModal();
+      toast(r.created ? "账号已添加" : "账号已更新");
+      loadAccounts();
+      return true;
+    } catch (e) {
+      $("#acctError").textContent = e.message;
+      return false;
+    }
+  }, "添加");
+}
+
+async function openBrowserLogin() {
+  try {
+    const r = await api("/api/accounts/browser", { method: "POST" });
+    openModal("浏览器登录", `
+      <div class="login-status"><span class="spinner"></span><div><b>已打开一个独立的 Dola 登录窗口。</b><br>请在其中完成登录，完成后这里会自动结束。不要关闭这个对话框。</div></div>
+      <div id="loginStatusMsg" class="form-hint" style="margin-top:12px">等待登录…</div>
+    `, null, null);
+    clearInterval(state.loginTimer);
+    state.loginTimer = setInterval(async () => {
+      try {
+        const s = await api("/api/accounts/browser/" + encodeURIComponent(r.id));
+        if (s.status === "done") {
+          clearInterval(state.loginTimer);
+          closeModal();
+          toast("账号已添加：" + (s.account?.name || s.account?.accountId || ""));
+          loadAccounts();
+        } else if (s.status === "failed") {
+          clearInterval(state.loginTimer);
+          const msg = $("#loginStatusMsg");
+          if (msg) msg.innerHTML = '<span style="color:var(--bad)">' + esc(s.error || "登录失败") + '</span><br>可以改用「添加账号」粘贴 Cookie。';
+        }
+      } catch (e) {
+        clearInterval(state.loginTimer);
+        const msg = $("#loginStatusMsg");
+        if (msg) msg.textContent = e.message;
+      }
+    }, 1200);
+  } catch (e) {
+    toast(e.message, "bad");
+    openModal("浏览器登录不可用", `
+      <div class="warn-box">这台机器无法打开浏览器窗口（无图形界面或找不到 Chrome/Edge）。<br><br>请改用「添加账号」粘贴 Cookie：在任意设备登录 dola.com，从开发者工具 Network → 任意请求 → Cookie 请求头复制整段。</div>
+    `, null, null);
+  }
+}
+
+function editAccount(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  if (!a) return;
+  openModal("编辑账号", `
+    <div class="field"><label for="editName">名称</label><input class="input" id="editName" value="${esc(a.name)}"></div>
+    <div class="form-grid">
+      <div class="field"><label for="editPriority">优先级（越小越先）</label><input class="input" id="editPriority" type="number" min="1" max="999" value="${a.priority}"></div>
+      <div class="field"><label for="editWeight">权重</label><input class="input" id="editWeight" type="number" min="1" max="100" value="${a.weight}"></div>
+      <div class="field"><label for="editConcurrency">并发上限</label><input class="input" id="editConcurrency" type="number" min="1" max="50" value="${a.maxConcurrency}"></div>
+      <div class="field"><label for="editNote">备注</label><input class="input" id="editNote" value="${esc(a.note)}"></div>
+    </div>
+    <div id="editError" class="form-error"></div>
+  `, async () => {
+    try {
+      await api("/api/accounts/" + encodeURIComponent(id), {
+        method: "PATCH",
+        body: {
+          name: $("#editName").value,
+          priority: Number($("#editPriority").value),
+          weight: Number($("#editWeight").value),
+          maxConcurrency: Number($("#editConcurrency").value),
+          note: $("#editNote").value,
+        },
+      });
+      closeModal();
+      toast("账号已更新");
+      loadAccounts();
+      return true;
+    } catch (e) {
+      $("#editError").textContent = e.message;
+      return false;
+    }
+  }, "保存");
+}
+
+async function testAccount(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  toast("正在测试 " + (a?.name || "账号") + "…", "warn");
+  try {
+    const r = await api("/api/accounts/" + encodeURIComponent(id) + "/test", { method: "POST" });
+    if (r.ok) toast("测试成功：" + (r.reply || "ok"));
+    else toast("测试失败：" + (r.error || "未知错误"), "bad");
+    loadAccounts();
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+async function toggleAccount(id, enable) {
+  try {
+    await api("/api/accounts/" + encodeURIComponent(id), { method: "PATCH", body: { enabled: enable } });
+    toast(enable ? "账号已启用" : "账号已停用");
+    loadAccounts();
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+function removeAccount(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  confirmDialog("删除账号", "确定删除「" + (a?.name || a?.accountId || id) + "」？Cookie 会从本机删除。", async () => {
+    try {
+      await api("/api/accounts/" + encodeURIComponent(id), { method: "DELETE" });
+      toast("账号已删除");
+      loadAccounts();
+    } catch (e) {
+      toast(e.message, "bad");
+    }
+  });
+}
+
+/* ---------- requests ---------- */
+async function loadRequests(silent = false) {
+  try {
+    const status = $("#filterStatus")?.value || "";
+    const model = $("#filterModel")?.value || "";
+    const q = new URLSearchParams({ limit: "200" });
+    if (status) q.set("status", status);
+    if (model) q.set("model", model);
+    const d = await api("/api/requests?" + q.toString());
+    state.requests = d.requests || [];
+    renderRequests();
+  } catch (e) {
+    if (!silent) toast(e.message, "bad");
+  }
+}
+
+function renderRequests() {
+  const body = $("#requestsBody");
+  if (!state.requests.length) {
+    body.innerHTML = '<tr><td colspan="8"><div class="empty"><b>没有匹配的请求</b><p>调用网关后记录会出现在这里。</p></div></td></tr>';
+    return;
+  }
+  body.innerHTML = state.requests.map((r) => {
+    const ok = Number(r.status) < 400;
+    const tokens = (Number(r.promptTokens) || 0) + (Number(r.completionTokens) || 0);
+    return "<tr>" +
+      "<td class=\"muted\">" + esc(fmtTime(r.ts)) + "</td>" +
+      "<td>" + esc(r.key || "—") + "</td>" +
+      "<td class=\"mono-sm\">" + esc(r.model) + "</td>" +
+      "<td class=\"mono-sm\">" + esc(r.account || "—") + "</td>" +
+      "<td>" + (ok ? '<span class="chip ok">' + esc(r.status) + '</span>' : '<span class="chip bad">' + esc(r.status) + '</span>') + "</td>" +
+      "<td class=\"num\">" + esc(fmtMs(r.durationMs)) + "</td>" +
+      "<td class=\"num\">" + esc(tokens || "—") + "</td>" +
+      "<td class=\"wrap muted\">" + esc(r.error || "") + "</td>" +
+      "</tr>";
+  }).join("");
+}
+
+/* ---------- keys ---------- */
+async function loadKeys() {
+  try {
+    const d = await api("/api/keys");
+    state.keys = d.keys || [];
+    renderKeys();
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+function maskKey(k) {
+  if (!k) return "";
+  return k.length <= 16 ? k : k.slice(0, 10) + "…" + k.slice(-6);
+}
+
+function renderKeys() {
+  const body = $("#keysBody");
+  if (!state.keys.length) {
+    body.innerHTML = '<tr><td colspan="6"><div class="empty"><b>还没有 API Key</b><p>新建一个 Key 给客户端使用。</p><button class="btn primary sm" onclick="openCreateKey()">新建 Key</button></div></td></tr>';
+  } else {
+    body.innerHTML = state.keys.map((k) => {
+      const models = k.models && k.models.length ? k.models.join(", ") : "全部";
+      return "<tr>" +
+        "<td><b>" + esc(k.name) + "</b></td>" +
+        "<td><span class=\"mono-sm\" id=\"key-" + k.id + "\">" + esc(maskKey(k.key)) + "</span> " +
+        "<button class=\"btn link sm\" onclick=\"revealKey('" + k.id + "')\">显示</button> " +
+        "<button class=\"btn link sm\" onclick=\"copyText(state.keys.find(x=>x.id==='" + k.id + "').key,'API Key')\">复制</button></td>" +
+        "<td class=\"muted\">" + esc(models) + "</td>" +
+        "<td>" + (k.enabled === false ? '<span class="chip muted">已停用</span>' : '<span class="chip ok">启用</span>') + "</td>" +
+        "<td class=\"muted\">" + esc(fmtTime(k.createdAt)) + "</td>" +
+        "<td><div class=\"row\">" +
+        "<button class=\"btn sm\" onclick=\"toggleKey('" + k.id + "'," + (k.enabled === false) + ")\">" + (k.enabled === false ? "启用" : "停用") + "</button>" +
+        "<button class=\"btn sm danger\" onclick=\"removeKey('" + k.id + "')\">删除</button>" +
+        "</div></td></tr>";
+    }).join("");
+  }
+  const base = state.settings?.server?.baseUrl || location.origin + "/v1";
+  const key = state.keys[0]?.key || "sk-dola-…";
+  $("#keysExample").textContent =
+    "curl " + base + "/chat/completions \\\n" +
+    "  -H \"Authorization: Bearer " + maskKey(key) + "\" \\\n" +
+    "  -H \"Content-Type: application/json\" \\\n" +
+    "  -d '{\"model\":\"dola-fast\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"stream\":true}'";
+}
+
+function revealKey(id) {
+  const k = state.keys.find((x) => x.id === id);
+  const el = document.getElementById("key-" + id);
+  if (!k || !el) return;
+  el.textContent = el.textContent.includes("…") ? k.key : maskKey(k.key);
+}
+
+function openCreateKey() {
+  openModal("新建 API Key", `
+    <div class="field"><label for="keyName">名称</label><input class="input" id="keyName" placeholder="例如：laptop / claude-code"></div>
+    <div class="field"><label for="keyModels">模型限制（逗号分隔，留空=全部）</label>
+      <input class="input" id="keyModels" placeholder="dola-fast, dola-pro">
+      <div class="form-hint">支持通配符，例如 <code>dola-*</code>。</div>
+    </div>
+    <div id="keyError" class="form-error"></div>
+  `, async () => {
+    const name = $("#keyName").value.trim();
+    const models = $("#keyModels").value.split(",").map((s) => s.trim()).filter(Boolean);
+    try {
+      await api("/api/keys", { method: "POST", body: { name, models } });
+      closeModal();
+      toast("API Key 已创建");
+      loadKeys();
+      return true;
+    } catch (e) {
+      $("#keyError").textContent = e.message;
+      return false;
+    }
+  }, "创建");
+}
+
+async function toggleKey(id, enable) {
+  try {
+    await api("/api/keys/" + encodeURIComponent(id), { method: "PATCH", body: { enabled: enable } });
+    toast(enable ? "Key 已启用" : "Key 已停用");
+    loadKeys();
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+function removeKey(id) {
+  const k = state.keys.find((x) => x.id === id);
+  confirmDialog("删除 API Key", "确定删除「" + (k?.name || id) + "」？使用它的客户端会立即失效。", async () => {
+    try {
+      await api("/api/keys/" + encodeURIComponent(id), { method: "DELETE" });
+      toast("Key 已删除");
+      loadKeys();
+    } catch (e) {
+      toast(e.message, "bad");
+    }
+  });
+}
+
+/* ---------- settings ---------- */
+async function loadSettings() {
+  try {
+    const d = await api("/api/settings");
+    state.settings = d;
+    $("#setStrategy").value = d.strategy;
+    $("#setAttempts").value = d.maxAttempts;
+    $("#setCooldown").value = d.cooldownSeconds;
+    $("#setSticky").value = d.stickyTtlSeconds;
+    $("#setRegion").value = d.region;
+    $("#setLanguage").value = d.language;
+    $("#setBotId").value = d.botId;
+    $("#setConcurrency").value = d.maxConcurrencyPerAccount;
+    const s = d.server || {};
+    $("#serverInfo").innerHTML =
+      kv("版本", s.version || "—") +
+      kv("监听", (s.host || "—") + ":" + (s.port || "—")) +
+      kv("Base URL", s.baseUrl || "—") +
+      kv("数据目录", s.dataDir || "—") +
+      (s.defaultPassword ? '<div class="warn-box" style="margin-top:12px">面板仍在使用默认密码 admin，请尽快修改。</div>' : "");
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
+function kv(k, v) {
+  return '<div class="kv"><span class="k">' + esc(k) + '</span><code>' + esc(v) + '</code></div>';
+}
+
+$("#settingsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    strategy: $("#setStrategy").value,
+    maxAttempts: Number($("#setAttempts").value),
+    cooldownSeconds: Number($("#setCooldown").value),
+    stickyTtlSeconds: Number($("#setSticky").value),
+    region: $("#setRegion").value,
+    language: $("#setLanguage").value,
+    botId: $("#setBotId").value,
+    maxConcurrencyPerAccount: Number($("#setConcurrency").value),
+  };
+  try {
+    await api("/api/settings", { method: "PUT", body });
+    toast("设置已保存");
+    loadSettings();
+  } catch (err) {
+    toast(err.message, "bad");
+  }
+});
+
+$("#passwordForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/password", { method: "POST", body: { current: $("#pwdCurrent").value, next: $("#pwdNext").value } });
+    $("#pwdCurrent").value = "";
+    $("#pwdNext").value = "";
+    toast("密码已修改");
+  } catch (err) {
+    toast(err.message, "bad");
+  }
+});
+
+function resetStats() {
+  confirmDialog("清零统计", "只清空账号与 Key 的计数，不删除账号、Key 或请求记录。继续？", async () => {
+    try {
+      await api("/api/stats/reset", { method: "POST" });
+      toast("统计已清零");
+      refreshPage();
+    } catch (e) {
+      toast(e.message, "bad");
+    }
+  });
+}
+
+/* ---------- modal / toast ---------- */
+let modalSubmit = null;
+
+function openModal(title, bodyHtml, onSubmit, submitLabel) {
+  modalSubmit = onSubmit;
+  $("#modalRoot").innerHTML =
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">' +
+    '<div class="modal" role="dialog" aria-modal="true">' +
+    '<div class="modal-head"><h3>' + esc(title) + '</h3><button class="x-btn" onclick="closeModal()" aria-label="关闭">×</button></div>' +
+    '<div class="modal-body">' + bodyHtml + '</div>' +
+    (onSubmit
+      ? '<div class="modal-foot"><button class="btn" onclick="closeModal()">取消</button><button class="btn primary" id="modalSubmit">' + esc(submitLabel || "确定") + '</button></div>'
+      : "") +
+    '</div></div>';
+  if (onSubmit) {
+    $("#modalSubmit").addEventListener("click", async () => {
+      const btn = $("#modalSubmit");
+      btn.disabled = true;
+      try {
+        const ok = await modalSubmit();
+        if (ok === false) btn.disabled = false;
+      } catch {
+        btn.disabled = false;
+      }
+    });
+    setTimeout(() => {
+      const first = $("#modalRoot .modal-body input, #modalRoot .modal-body textarea");
+      first?.focus();
+    }, 30);
+  }
+}
+
+function closeModal() {
+  clearInterval(state.loginTimer);
+  state.loginTimer = null;
+  modalSubmit = null;
+  $("#modalRoot").innerHTML = "";
+}
+
+function confirmDialog(title, message, onConfirm) {
+  openModal(title, '<div style="font-size:13px;line-height:1.7;color:var(--dim)">' + esc(message) + '</div>', async () => {
+    await onConfirm();
+    closeModal();
+    return true;
+  }, "确定");
+}
+
+function toast(message, kind = "") {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = message;
+  $("#toastRoot").appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(4px)";
+    el.style.transition = "opacity .2s, transform .2s";
+    setTimeout(() => el.remove(), 220);
+  }, 3200);
+}
+
+async function copyText(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast((label || "内容") + " 已复制");
+  } catch {
+    toast("复制失败，请手动选择", "bad");
+  }
+}
+
+/* ---------- format / theme ---------- */
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const today = new Date();
+  const same = d.toDateString() === today.toDateString();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return same ? hh + ":" + mm + ":" + ss : (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":" + mm;
+}
+
+function fmtMs(ms) {
+  const n = Number(ms) || 0;
+  if (n < 1000) return n + " ms";
+  return (n / 1000).toFixed(n < 10000 ? 1 : 0) + " s";
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("dola-hub-theme", next); } catch {}
+}
+
+try {
+  const saved = localStorage.getItem("dola-hub-theme");
+  if (saved === "dark") document.documentElement.dataset.theme = "dark";
+} catch {}
+
+boot();
+</script>
+</body>
+</html>
