@@ -50,8 +50,9 @@ test("reports an unavailable app", async () => {
   assert.equal(desktop.available(), false)
   const current = desktop.current()
   assert.equal(current.models.length, 0)
-  assert.match(current.error, /未找到/)
-  await assert.rejects(() => desktop.ask({ prompt: "hi", model: "auto" }), /未找到/)
+  // Linux reports its own message; Windows/macOS report a missing install.
+  assert.match(current.error, /未找到|没有桌面版/)
+  await assert.rejects(() => desktop.ask({ prompt: "hi", model: "auto" }), /未找到|没有桌面版/)
 })
 
 test("a failed refresh keeps the previous models", async () => {
