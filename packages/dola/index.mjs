@@ -27,7 +27,7 @@ import {
 } from "./dola.mjs"
 import { LOGIN_URL, openLoginBrowser } from "./browser.mjs"
 import { completion, sse } from "./openai.mjs"
-import { flatten } from "./prompt.mjs"
+import { flatten, toolPolicy } from "./prompt.mjs"
 
 const ID = "dola"
 const BASE = "https://www.dola.com/v1"
@@ -229,6 +229,7 @@ export function createPlugin({
               return json(404, `没有模型 ${model}。可用：${Object.keys(MODELS).join("、")}。`, "model_not_found")
 
             const prompt = flatten(body)
+            const policy = toolPolicy(body)
             const deepThink = model === "dola-pro" ? 3 : 0
             const id = "chatcmpl-" + Math.random().toString(36).slice(2)
             const signal = request ? request.signal : init.signal
@@ -248,9 +249,9 @@ export function createPlugin({
             }
 
             try {
-              if (body.stream) return await sse({ id, model, signal, ask, promptText: prompt })
+              if (body.stream) return await sse({ id, model, signal, ask, promptText: prompt, policy })
               const final = await ask(undefined, signal)
-              return Response.json(completion({ id, model, final, promptText: prompt }))
+              return Response.json(completion({ id, model, final, promptText: prompt, policy }))
             } catch (e) {
               if (e?.name === "AbortError" || e?.name === "TimeoutError") throw e
               return errorResponse(e)

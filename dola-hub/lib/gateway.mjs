@@ -7,7 +7,7 @@
 import { Readable } from "node:stream"
 import { randomUUID } from "node:crypto"
 import { completion, sse } from "../../packages/dola/openai.mjs"
-import { flatten } from "../../packages/dola/prompt.mjs"
+import { flatten, toolPolicy } from "../../packages/dola/prompt.mjs"
 import { streamCompletion } from "../../packages/dola/dola.mjs"
 import { BUILTIN_MODELS } from "./models.mjs"
 
@@ -65,6 +65,18 @@ function sendJson(res, status, body) {
 
 function sendError(res, status, message, type = "hub_error") {
   sendJson(res, status, { error: { message: String(message).slice(0, 1000), type } })
+}
+
+function pipeSse(res, response) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+    "x-accel-buffering": "no",
+  })
+  const readable = Readable.fromWeb(response.body)
+  readable.pipe(res)
+  res.on("close", () => readable.destroy())
 }
 
 function readJson(req, limit = 16 * 1024 * 1024) {
@@ -173,8 +185,9 @@ export function createGateway({
       return sendError(res, 403, `this API key is not allowed to use ${model}`, "model_not_allowed")
 
     const prompt = flatten(body)
+    const policy = toolPolicy(body)
     const deepThink = Number(modelInfo.deepThink) || 0
-    const sessionKey = String(body.user ?? req.headers["x-session-id"] ?? body.metadata?.session_id ?? "")
+    const sessionKey = String(body.user ?? req.headers["x-session-id"] ?? body.metadata?.session_id ?? "").slice(0, 256)
     const id = "chatcmpl-" + randomUUID().replace(/-/g, "").slice(0, 24)
     const started = Date.now()
     const signal = requestSignal(req, res)
@@ -191,7 +204,7 @@ export function createGateway({
         durationMs: Date.now() - started,
         promptTokens: estimate(prompt),
         completionTokens: estimate(finalText) + estimate(reasoning),
-        error: error ? String(error).slice(0, 300) : "",
+        error: error ? String(error?.message ?? error).slice(0, 300) : "",
       })
       key.stats = key.stats || { requests: 0, success: 0, failure: 0 }
       key.stats.requests = (Number(key.stats.requests) || 0) + 1
@@ -279,9 +292,12 @@ export function createGateway({
         }
       }
       try {
-        if (body.stream) return await sse({ id, model, ask: askDesktop, signal, promptText: prompt })
+        if (body.stream) {
+          const response = await sse({ id, model, ask: askDesktop, signal, promptText: prompt, policy })
+          return pipeSse(res, response)
+        }
         const final = await askDesktop(undefined, signal)
-        return sendJson(res, 200, completion({ id, model, final, promptText: prompt }))
+        return sendJson(res, 200, completion({ id, model, final, promptText: prompt, policy }))
       } catch (e) {
         if (res.headersSent) {
           try {
@@ -296,20 +312,11 @@ export function createGateway({
 
     try {
       if (body.stream) {
-        const response = await sse({ id, model, ask, signal, promptText: prompt })
-        res.writeHead(200, {
-          "content-type": "text/event-stream; charset=utf-8",
-          "cache-control": "no-cache, no-transform",
-          connection: "keep-alive",
-          "x-accel-buffering": "no",
-        })
-        const readable = Readable.fromWeb(response.body)
-        readable.pipe(res)
-        res.on("close", () => readable.destroy())
-        return
+        const response = await sse({ id, model, ask, signal, promptText: prompt, policy })
+        return pipeSse(res, response)
       }
       const final = await ask(undefined, signal)
-      const out = completion({ id, model, final, promptText: prompt })
+      const out = completion({ id, model, final, promptText: prompt, policy })
       sendJson(res, 200, out)
     } catch (e) {
       if (res.headersSent) {

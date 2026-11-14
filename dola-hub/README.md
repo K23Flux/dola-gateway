@@ -22,8 +22,8 @@ node server.mjs
 # 或：PORT=8788 HOST=127.0.0.1 PANEL_PASSWORD='change-me' node server.mjs
 ```
 
-打开 `http://127.0.0.1:8788/`。首次启动会打印一个 API Key；面板密码默认是
-`admin`，登录后请在「设置」里修改。
+打开 `http://127.0.0.1:8788/`。首次启动会生成并打印一次面板密码；API Key
+在登录后的「总览 / API Key」页查看。
 
 控制台有这些页面：
 
@@ -91,7 +91,8 @@ provider 读取），或你自己用 API Key 添加的第三方模型；当前�
 如果网页模型不够，网关可以驱动 **豆包工作** 或 **豆包** 桌面版，读取 App 自己的
 模型菜单，把 DeepSeek、GLM、Kimi 等模型加到同一个 `/v1` 接口里。
 
-- 需要 **Windows 或 macOS**，并安装、登录桌面版；Linux 没有桌面版。
+- 桌面版后端默认关闭；需要 **Windows 或 macOS**，设置 `DOLA_HUB_DESKTOP=1`
+  （或启动参数 `--desktop`）并安装、登录桌面版。Linux 没有桌面版。
 - 「模型」页 → 桌面版后端 → **获取桌面模型**。网关会用自己的 profile 启动 App，
   读取模型菜单；模型会出现在「当前模型」表里，后端标记为「桌面」，也会进入
   API Key 的模型白名单。
@@ -149,8 +150,10 @@ curl http://127.0.0.1:8788/v1/chat/completions \
 | --- | --- | --- |
 | `PORT` | `8788` | HTTP 端口（也支持 `--port`） |
 | `HOST` | `127.0.0.1` | 监听地址（也支持 `--host`） |
-| `PANEL_PASSWORD` | `admin` | 首次启动的面板密码 |
+| `PANEL_PASSWORD` | 首次启动随机生成 | 初始化密码；也可迁移旧 `admin` 密码（非默认且至少 6 位），不覆盖已有自定义密码 |
 | `DOLA_HUB_DATA` | `./data` | 状态与请求日志目录 |
+| `DOLA_HUB_DESKTOP` | 关闭 | 设为 `1` 才启用桌面版模型（也支持 `--desktop`） |
+| `DOLA_HUB_TRUST_PROXY` | 关闭 | 设为 `1` 后信任代理的 `X-Forwarded-Proto` 以设置 Secure Cookie；不提供 TLS，也不限制监听地址（也支持 `--trust-proxy`） |
 | `DOLA_BROWSER` | 自动 | 浏览器登录用的 Chrome/Chromium/Edge |
 | `DOLA_BROWSER_HEADLESS` | 关闭 | `1` 用无头浏览器登录 |
 | `DOLA_LOGIN_PROFILE` | 临时 | 复用浏览器 profile |
@@ -158,10 +161,22 @@ curl http://127.0.0.1:8788/v1/chat/completions \
 
 ## 安全
 
-- 面板默认只监听 `127.0.0.1`。如果设置 `HOST=0.0.0.0`，请放在 TLS 后面，并
-  立即修改面板密码。
+- 面板默认只监听 `127.0.0.1`，首次启动会生成随机密码并只打印一次。已有状态若仍
+  使用默认 `admin`，必须设置非默认且至少 6 位的强 `PANEL_PASSWORD`；服务会在监听前
+  替换并保存密码，保留账号和 Key。未提供有效替换值时拒绝启动，新装显式使用
+  `admin` 也会被拒绝。已有自定义密码不会被环境变量覆盖；正常改密请用设置页面。
+- 非回环监听不要求开启代理信任。远程访问应使用 HTTPS 反向代理及网络访问控制；
+  `DOLA_HUB_TRUST_PROXY=1`（或 `--trust-proxy`）只控制是否信任 `X-Forwarded-Proto`，
+  不建立 TLS，也不验证代理存在。仅在后端只能由可信代理访问、且代理覆盖该请求头时
+  开启；头为 `https` 时为会话 Cookie 添加 `Secure`。
+- 面板状态变更接口要求 JSON 内容类型并校验同源 `Origin`；不要用反向代理改写
+  `Host`，否则登录和面板写入会被拒绝。
 - Cookie 等同于账号权限。`data/state.json` 权限 600，且已 gitignore；不要提交。
-- 请求日志不记录提示词和 Cookie。
+- 上游非 2xx HTTP 错误只保留 HTTP 状态码；SSE 错误转换为本地固定消息及错误分类，
+  不透传原始错误消息或任意上游错误码。请求日志不主动记录提示词和 Cookie，日志中的
+  `key=value`、JSON、URL 编码及常见 Cookie / Bearer / `sk-*` 凭据形状会脱敏；
+  这些模式不保证识别所有敏感文本，也不会清理历史日志。
+- 桌面版后端默认关闭；需要时用 `DOLA_HUB_DESKTOP=1` 或 `--desktop` 显式开启。
 - 面板是单用户的：一个密码、一套账号和 Key。
 
 ## 测试

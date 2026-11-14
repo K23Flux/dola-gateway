@@ -6,11 +6,11 @@ import { join } from "node:path"
 import { createStore } from "../lib/store.mjs"
 import { createPool } from "../lib/pool.mjs"
 
-function setup(settings = {}) {
+function setup(settings = {}, poolOptions = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dola-hub-pool-"))
   const store = createStore({ dataDir: dir, env: { PANEL_PASSWORD: "pw" } })
   store.updateSettings({ cooldownSeconds: 60, stickyTtlSeconds: 1800, ...settings })
-  const pool = createPool({ store })
+  const pool = createPool({ store, ...poolOptions })
   const cleanup = () => rmSync(dir, { recursive: true, force: true })
   return { store, pool, cleanup }
 }
@@ -127,6 +127,25 @@ test("a success revives an invalid account and clears its cooldown", () => {
     assert.equal(a.invalid, false)
     assert.equal(a.cooldownUntil, 0)
     assert.equal(a.stats.success, 1)
+  } finally {
+    cleanup()
+  }
+})
+
+test("sticky sessions are capped and expired entries are pruned", () => {
+  let at = 1_000_000
+  const { store, pool, cleanup } = setup({}, { maxSticky: 2, now: () => at })
+  try {
+    store.addAccount({ cookie: "sessionid=a", accountId: "a" })
+    store.addAccount({ cookie: "sessionid=b", accountId: "b" })
+    pool.pick({ sessionKey: "one", at })
+    pool.pick({ sessionKey: "two", at })
+    pool.pick({ sessionKey: "three", at })
+    assert.equal(pool.stickyCount(), 2)
+
+    at += 1_800_001
+    pool.pick({ sessionKey: "four", at })
+    assert.equal(pool.stickyCount(), 1)
   } finally {
     cleanup()
   }

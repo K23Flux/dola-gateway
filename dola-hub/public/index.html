@@ -269,7 +269,7 @@
     </div>
     <div id="loginError" class="form-error"></div>
     <button class="btn primary" type="submit" style="width:100%;height:38px">进入面板</button>
-    <div id="defaultHint" class="hint" hidden>当前仍在使用默认密码 <b>admin</b>，登录后请在「设置」中修改。</div>
+    <div id="defaultHint" class="hint" hidden>当前仍在使用默认密码，登录后请在「设置」中修改。</div>
   </form>
 </div>
 
@@ -1307,7 +1307,7 @@ async function loadSettings() {
       kv("监听", (s.host || "—") + ":" + (s.port || "—")) +
       kv("Base URL", s.baseUrl || "—") +
       kv("数据目录", s.dataDir || "—") +
-      (s.defaultPassword ? '<div class="warn-box" style="margin-top:12px">面板仍在使用默认密码 admin，请尽快修改。</div>' : "");
+      (s.defaultPassword ? '<div class="warn-box" style="margin-top:12px">面板仍在使用默认密码，请尽快修改。</div>' : "");
   } catch (e) {
     toast(e.message, "bad");
   }

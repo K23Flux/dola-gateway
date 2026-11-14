@@ -52,6 +52,18 @@ function choice(body, names) {
   return {}
 }
 
+// toolPolicy is what the output parser may turn into OpenAI tool_calls.
+// The prompt is only an instruction; this is the enforcement point.
+export function toolPolicy(body) {
+  const names = (Array.isArray(body?.tools) ? body.tools : [])
+    .map((t) => (t?.function ?? t)?.name)
+    .filter((name) => typeof name === "string" && name)
+  const ch = choice(body ?? {}, names)
+  if (ch.off) return { mode: "none", names: new Set() }
+  if (ch.only) return { mode: "only", names: new Set([ch.only]) }
+  return { mode: ch.must ? "required" : "auto", names: new Set(names) }
+}
+
 // flatten writes an OpenAI chat request as one prompt for Dola.
 export function flatten(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : []
@@ -138,8 +150,10 @@ function parseCall(raw) {
   return { name, arguments: typeof args === "string" ? args : JSON.stringify(args ?? {}) }
 }
 
-// parse splits a finished reply into its text and tool calls.
-export function parse(text, newId = () => "call_" + Math.random().toString(36).slice(2, 14)) {
+// parse splits a finished reply into its text and tool calls. A policy
+// keeps tool_choice and the request's tool list authoritative: text that is
+// not an allowed call stays in the reply instead of becoming a tool call.
+export function parse(text, newId = () => "call_" + Math.random().toString(36).slice(2, 14), policy = null) {
   const calls = []
   let rest = ""
   let i = 0
@@ -153,7 +167,8 @@ export function parse(text, newId = () => "call_" + Math.random().toString(36).s
     const end = text.indexOf(CLOSE, at + OPEN.length)
     const raw = text.slice(at + OPEN.length, end < 0 ? text.length : end)
     const call = parseCall(raw)
-    if (call) calls.push({ id: newId(), type: "function", function: call })
+    const allowed = call && (!policy || (policy.mode !== "none" && policy.names?.has(call.name)))
+    if (allowed) calls.push({ id: newId(), type: "function", function: call })
     else rest += text.slice(at, end < 0 ? text.length : end + CLOSE.length)
     i = end < 0 ? text.length : end + CLOSE.length
   }

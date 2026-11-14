@@ -6,6 +6,39 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync
 import { randomUUID } from "node:crypto"
 import { join } from "node:path"
 
+const SECRET_KEYS = [
+  "sessionid",
+  "oauth_token",
+  "authorization",
+  "cookie",
+  "token",
+  "api[_-]?key",
+  "password",
+  "dola_session",
+  "flow_cur_user_sec_id",
+  "msToken",
+  "a_bogus",
+].join("|")
+
+// redact covers key=value, quoted JSON keys and percent-encoded separators.
+// Unknown secret shapes cannot all be predicted, so callers should avoid
+// putting raw upstream response bodies in the ledger in the first place.
+const redact = (value) => {
+  let text = String(value ?? "")
+  try {
+    text = decodeURIComponent(text)
+  } catch {}
+  const quoted = `["']?(${SECRET_KEYS})["']?`
+  const pair = new RegExp(
+    `${quoted}\\s*(?:%3a|:|%3d|=)\\s*(?:Bearer\\s+)?(?:["'][^"']*["']|[^\\s,;"'}]+)`,
+    "gi",
+  )
+  return text
+    .replace(pair, "$1=[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [redacted]")
+    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "sk-[redacted]")
+}
+
 export function createLog({ dataDir, maxMemory = 500, maxBytes = 5 * 1024 * 1024 } = {}) {
   mkdirSync(dataDir, { recursive: true, mode: 0o700 })
   const file = join(dataDir, "requests.jsonl")
@@ -63,6 +96,7 @@ export function createLog({ dataDir, maxMemory = 500, maxBytes = 5 * 1024 * 1024
       error: "",
       ...data,
     }
+    entry.error = redact(entry.error)
     entries.push(entry)
     if (entries.length > maxMemory) entries.splice(0, entries.length - maxMemory)
     append(entry)

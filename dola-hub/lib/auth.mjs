@@ -10,7 +10,12 @@ export function parseCookies(header = "") {
     if (at < 0) continue
     const k = part.slice(0, at).trim()
     const v = part.slice(at + 1).trim()
-    if (k) out[k] = decodeURIComponent(v)
+    if (!k) continue
+    try {
+      out[k] = decodeURIComponent(v)
+    } catch {
+      out[k] = v
+    }
   }
   return out
 }
@@ -41,12 +46,16 @@ export function createAuth({ store, ttlMs = 7 * 24 * 60 * 60 * 1000 } = {}) {
     if (token) sessions.delete(token)
   }
 
-  function cookie(token) {
-    return `dola_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(ttlMs / 1000)}`
+  function clearAll() {
+    sessions.clear()
   }
 
-  function clearCookie() {
-    return "dola_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0"
+  function cookie(token, { secure = false } = {}) {
+    return `dola_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(ttlMs / 1000)}${secure ? "; Secure" : ""}`
+  }
+
+  function clearCookie({ secure = false } = {}) {
+    return `dola_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure ? "; Secure" : ""}`
   }
 
   function keyOf(req) {
@@ -61,5 +70,5 @@ export function createAuth({ store, ttlMs = 7 * 24 * 60 * 60 * 1000 } = {}) {
     for (const [token, s] of sessions) if (s.expires <= at) sessions.delete(token)
   }
 
-  return { login, check, logout, cookie, clearCookie, keyOf, cleanup, sessions }
+  return { login, check, logout, clearAll, cookie, clearCookie, keyOf, cleanup, sessions }
 }

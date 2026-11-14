@@ -192,22 +192,39 @@ export function buildBody({ text, deepThink = 0, botId = DEFAULT_BOT_ID } = {}) 
   }
 }
 
+const SSE_FRAME_END = /\r\n\r\n|\n\n|\r\r/
+const SSE_LINE_END = /\r\n|\n|\r/
+
+// takeSseFrame returns the first complete frame in buffer and what follows
+// it. SSE permits LF, CRLF and CR line endings, so all three frame endings
+// have to be recognised while the stream is still arriving.
+function takeSseFrame(buffer) {
+  let best = null
+  for (const delimiter of ["\r\n\r\n", "\n\n", "\r\r"]) {
+    const at = buffer.indexOf(delimiter)
+    if (at < 0) continue
+    if (!best || at < best.at || (at === best.at && delimiter.length > best.delimiter.length))
+      best = { at, delimiter }
+  }
+  return best ? { block: buffer.slice(0, best.at), rest: buffer.slice(best.at + best.delimiter.length) } : null
+}
+
 // parseSseFrames turns a buffer of `event:`/`data:` blocks into records.
 export function parseSseFrames(buffer) {
   const frames = []
-  for (const raw of String(buffer).split("\n\n")) {
+  for (const raw of String(buffer).split(SSE_FRAME_END)) {
     const block = raw.trim()
     if (!block) continue
     let event = "message"
-    let data = ""
-    for (const line of block.split("\n")) {
+    const dataLines = []
+    for (const line of block.split(SSE_LINE_END)) {
       if (line.startsWith("event:")) event = line.slice(6).trim()
-      else if (line.startsWith("data:")) data += line.slice(5).trim()
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""))
     }
     let parsed = null
-    if (data) {
+    if (dataLines.length) {
       try {
-        parsed = JSON.parse(data)
+        parsed = JSON.parse(dataLines.join("\n"))
       } catch {}
     }
     frames.push({ event, data: parsed })
@@ -266,8 +283,10 @@ export async function streamCompletion({
     throw new DolaError("Dola is rate limiting this account", { code: "rate_limited", status: 429 })
   }
   if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new DolaError(`Dola HTTP ${res.status}: ${body.slice(0, 300)}`, {
+    // Neither a free-form upstream message nor an arbitrary error-code
+    // string is safe to include in logs or API responses.
+    await res.body?.cancel().catch(() => {})
+    throw new DolaError(`Dola HTTP ${res.status}`, {
       code: "upstream_error",
       status: 502,
     })
@@ -290,12 +309,19 @@ export async function streamCompletion({
           Number(err.error_code) === 710022002 ||
           /high demand|try again later|rate.?limit|too many|稍后|频繁/i.test(message)
         const lapsed = /sign in|log in|login|session|unauthorized|expired|未登录|登录/i.test(message)
-        const error = new DolaError(`Dola stream error: ${message} (${err.error_code ?? ""})`, {
-          code: lapsed ? "signin_expired" : rate ? "rate_limited" : "upstream_error",
-          status: lapsed ? 401 : rate ? 429 : 502,
-        })
-        error.dola = err
-        throw error
+        // Use the raw message only to classify the error, never to expose
+        // upstream content to API clients, request logs or error inspectors.
+        throw new DolaError(
+          lapsed
+            ? "Dola refused the session cookies; sign in again"
+            : rate
+              ? "Dola is rate limiting this account"
+              : "Dola stream failed",
+          {
+            code: lapsed ? "signin_expired" : rate ? "rate_limited" : "upstream_error",
+            status: lapsed ? 401 : rate ? 429 : 502,
+          },
+        )
       }
       if (f.event === "SSE_ACK" && f.data?.ack_client_meta) {
         out.conversationId = f.data.ack_client_meta.conversation_id || out.conversationId
@@ -316,11 +342,12 @@ export async function streamCompletion({
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    const at = buffer.lastIndexOf("\n\n")
-    if (at < 0) continue
-    const ready = buffer.slice(0, at)
-    buffer = buffer.slice(at + 2)
-    handle(parseSseFrames(ready))
+    for (;;) {
+      const frame = takeSseFrame(buffer)
+      if (!frame) break
+      handle(parseSseFrames(frame.block))
+      buffer = frame.rest
+    }
   }
   if (buffer.trim()) handle(parseSseFrames(buffer))
   return out

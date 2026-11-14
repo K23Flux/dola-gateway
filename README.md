@@ -19,8 +19,8 @@ cd dola-hub
 node server.mjs
 ```
 
-打开 `http://127.0.0.1:8788/`。首次启动会打印一个 API Key；面板密码默认是
-`admin`，登录后请在「设置」里修改。
+打开 `http://127.0.0.1:8788/`。首次启动会生成并打印一次面板密码；API Key
+在登录后的「总览 / API Key」页查看。
 
 1. **账号** → 添加账号：粘贴 Dola Cookie（无图形界面的 VPS 用这个），或在有
    Chrome/Edge 的机器上用「浏览器登录」。
@@ -96,7 +96,8 @@ bundle 读不到时使用内置列表。
 网页模型不够时，网关可以驱动 **豆包工作 / 豆包桌面版**，读取 App 自己的模型菜单，
 把 DeepSeek、GLM、Kimi 等模型加到同一个 `/v1` 接口里：
 
-- 需要 **Windows 或 macOS**，并安装、登录桌面版；Linux 没有桌面版。
+- 桌面版后端默认关闭；需要 **Windows 或 macOS**，设置 `DOLA_HUB_DESKTOP=1`
+  （或启动参数 `--desktop`）并安装、登录桌面版。Linux 没有桌面版。
 - 「模型」页 → 桌面版后端 → **获取桌面模型**。网关会用自己的 profile 启动 App，
   读取菜单；模型会出现在「当前模型」表里（后端标记为「桌面」），也会进入 API Key
   的模型白名单。
@@ -127,8 +128,10 @@ Authorization: Bearer sk-dola-...
 | --- | --- | --- |
 | `PORT` | `8788` | HTTP 端口（也支持 `--port`） |
 | `HOST` | `127.0.0.1` | 监听地址（也支持 `--host`） |
-| `PANEL_PASSWORD` | `admin` | 首次启动的面板密码 |
+| `PANEL_PASSWORD` | 首次启动随机生成 | 初始化密码；也可迁移旧 `admin` 密码（非默认且至少 6 位），不覆盖已有自定义密码 |
 | `DOLA_HUB_DATA` | `./data` | 状态与请求日志目录 |
+| `DOLA_HUB_DESKTOP` | 关闭 | 设为 `1` 才启用桌面版模型（也支持 `--desktop`） |
+| `DOLA_HUB_TRUST_PROXY` | 关闭 | 设为 `1` 后信任代理的 `X-Forwarded-Proto` 以设置 Secure Cookie；不提供 TLS，也不限制监听地址（也支持 `--trust-proxy`） |
 | `DOLA_BROWSER` | 自动 | 浏览器登录用的 Chrome/Chromium/Edge |
 | `DOLA_BROWSER_HEADLESS` | 关闭 | `1` 用无头浏览器登录 |
 | `DOLA_LOGIN_PROFILE` | 临时 | 复用浏览器 profile |

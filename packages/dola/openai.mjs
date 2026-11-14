@@ -30,8 +30,8 @@ export class Streamer {
     return out
   }
 
-  finish(final, newId) {
-    const p = parse(final?.text ?? this.text, newId)
+  finish(final, newId, policy = null) {
+    const p = parse(final?.text ?? this.text, newId, policy)
     const shown = this.text.slice(0, this.shown)
     let content = p.raw.startsWith(shown) ? p.raw.slice(shown.length) : ""
     if (p.calls.length)
@@ -65,7 +65,7 @@ const chunk = (id, model, delta, finish = null, extra = {}) =>
 // sse runs ask(onUpdate, signal) and streams what it reads. It resolves
 // once the reply has begun, so a failure before that (not signed in, a
 // refused session) goes back as an HTTP error, not as a 200 stream.
-export async function sse({ id, model, ask, signal, promptText = "", newId }) {
+export async function sse({ id, model, ask, signal, promptText = "", newId, policy = null }) {
   const st = new Streamer()
   const abort = new AbortController()
   const both = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal
@@ -91,7 +91,7 @@ export async function sse({ id, model, ask, signal, promptText = "", newId }) {
       }, both)
       begun = true
       deltas(st.update(final))
-      const { content, calls } = st.finish(final, newId)
+      const { content, calls } = st.finish(final, newId, policy)
       if (content) push(chunk(id, model, { content }))
       if (calls.length)
         push(chunk(id, model, { tool_calls: calls.map((x, index) => ({ index, id: x.id, type: "function", function: x.function })) }))
@@ -132,8 +132,8 @@ export async function sse({ id, model, ask, signal, promptText = "", newId }) {
   return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" } })
 }
 
-export function completion({ id, model, final, promptText, newId }) {
-  const { text, calls } = parse(final.text ?? "", newId)
+export function completion({ id, model, final, promptText, newId, policy = null }) {
+  const { text, calls } = parse(final.text ?? "", newId, policy)
   const message = { role: "assistant", content: text || (calls.length ? null : "") }
   if (final.reasoning) message.reasoning_content = final.reasoning
   if (calls.length) message.tool_calls = calls

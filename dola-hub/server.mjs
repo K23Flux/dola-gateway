@@ -8,8 +8,8 @@
 // address, set a strong PANEL_PASSWORD and terminate TLS in front of it.
 
 import { createServer } from "node:http"
-import { createHash, randomUUID } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { createHash, randomBytes, randomUUID } from "node:crypto"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -41,14 +41,35 @@ const HOST = process.env.HOST || argOf("--host") || "127.0.0.1"
 const PORT = Number(process.env.PORT) || Number(argOf("--port")) || 8788
 const VERSION = "0.1.0"
 const BODY_LIMIT = 16 * 1024 * 1024
+const stateFile = join(DATA_DIR, "state.json")
+const firstRun = !existsSync(stateFile)
+const generatedPassword =
+  firstRun && !process.env.PANEL_PASSWORD ? randomBytes(18).toString("base64url") : ""
+const trustProxy = process.env.DOLA_HUB_TRUST_PROXY === "1" || argv.includes("--trust-proxy")
 
-const store = createStore({ dataDir: DATA_DIR })
+const store = createStore({
+  dataDir: DATA_DIR,
+  env: generatedPassword ? { ...process.env, PANEL_PASSWORD: generatedPassword } : process.env,
+})
 const pool = createPool({ store })
 const log = createLog({ dataDir: DATA_DIR })
 const auth = createAuth({ store })
-const desktop = createDesktopBackend()
+const desktopEnabled = process.env.DOLA_HUB_DESKTOP === "1" || argv.includes("--desktop")
+const desktop = desktopEnabled ? createDesktopBackend() : null
 const catalog = createModelCatalog({ desktop })
 const gateway = createGateway({ store, pool, log, catalog, desktop })
+
+// Existing state ignores PANEL_PASSWORD during loading. Migrate only the
+// known default, and persist the replacement before accepting connections.
+if (store.verifyPassword("admin")) {
+  const replacement = process.env.PANEL_PASSWORD || ""
+  if (replacement === "admin" || replacement.length < 6) {
+    console.error("refusing to start with the default panel password; set PANEL_PASSWORD to a strong value")
+    process.exit(1)
+  }
+  store.setPassword(replacement)
+  store.flush()
+}
 
 const createdKey = store.ensureDefaultKey()
 const startedAt = Date.now()
@@ -80,6 +101,11 @@ function sendError(res, status, message, type = "hub_error") {
 
 function readJson(req, limit = BODY_LIMIT) {
   return new Promise((resolve, reject) => {
+    const type = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase()
+    if (type !== "application/json" && !type.endsWith("+json")) {
+      reject(new HubError("content-type must be application/json", 415, "unsupported_media_type"))
+      return
+    }
     let size = 0
     const chunks = []
     req.on("data", (chunk) => {
@@ -103,10 +129,31 @@ function readJson(req, limit = BODY_LIMIT) {
   })
 }
 
+function sameOrigin(req) {
+  const origin = req.headers.origin
+  if (!origin) return true
+  try {
+    return new URL(origin).host.toLowerCase() === String(req.headers.host || "").toLowerCase()
+  } catch {
+    return false
+  }
+}
+
+function secureCookie(req) {
+  if (req.socket?.encrypted === true) return true
+  if (!trustProxy) return false
+  const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim().toLowerCase()
+  return proto === "https"
+}
+
 function requirePanel(req, res) {
   const session = auth.check(req)
   if (!session) {
     sendError(res, 401, "panel login required", "unauthorized")
+    return null
+  }
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !sameOrigin(req)) {
+    sendError(res, 403, "cross-origin panel request refused", "forbidden")
     return null
   }
   return session
@@ -217,6 +264,7 @@ async function handle(req, res) {
   }
 
   if (path === "/api/login" && req.method === "POST") {
+    if (!sameOrigin(req)) return sendError(res, 403, "cross-origin login refused", "forbidden")
     const ip = req.socket.remoteAddress || "unknown"
     const now = Date.now()
     const attempt = loginAttempts.get(ip)
@@ -232,14 +280,15 @@ async function handle(req, res) {
       return sendError(res, 401, "密码不对", "unauthorized")
     }
     loginAttempts.delete(ip)
-    res.setHeader("Set-Cookie", auth.cookie(token))
+    res.setHeader("Set-Cookie", auth.cookie(token, { secure: secureCookie(req) }))
     return sendJson(res, 200, { ok: true, defaultPassword: store.isDefaultPassword() })
   }
 
   if (path === "/api/logout" && req.method === "POST") {
+    if (!sameOrigin(req)) return sendError(res, 403, "cross-origin logout refused", "forbidden")
     const session = auth.check(req)
     if (session) auth.logout(session.token)
-    res.setHeader("Set-Cookie", auth.clearCookie())
+    res.setHeader("Set-Cookie", auth.clearCookie({ secure: secureCookie(req) }))
     return sendJson(res, 200, { ok: true })
   }
 
@@ -287,6 +336,7 @@ async function handle(req, res) {
   }
 
   if (path === "/api/models/desktop/refresh" && req.method === "POST") {
+    if (!desktop) return sendError(res, 503, "桌面版后端未启用", "desktop_unavailable")
     await desktop.refresh()
     return sendJson(res, 200, catalog.snapshot())
   }
@@ -426,6 +476,8 @@ async function handle(req, res) {
     const next = String(body.next ?? "")
     if (next.length < 6) return sendError(res, 400, "新密码至少 6 位", "invalid_password")
     store.setPassword(next)
+    auth.clearAll()
+    res.setHeader("Set-Cookie", auth.clearCookie({ secure: secureCookie(req) }))
     return sendJson(res, 200, { ok: true })
   }
 
@@ -479,16 +531,22 @@ const cleanup = setInterval(() => {
 }, 10 * 60 * 1000)
 cleanup.unref()
 
+if (generatedPassword) console.log(`  generated panel password: ${generatedPassword} (save it now; it is not shown again)`)
+
 server.listen(PORT, HOST, () => {
   console.log(`Dola Hub v${VERSION}`)
   console.log(`  panel: http://${HOST === "0.0.0.0" ? "127.0.0.1" : HOST}:${PORT}/`)
   console.log(`  api:   http://${HOST === "0.0.0.0" ? "<this-machine-ip>" : HOST}:${PORT}/v1`)
   console.log(`  data:  ${DATA_DIR}`)
-  const ds = desktop.current()
-  console.log(`  desktop: ${ds.available ? ds.app.app || ds.app.binary : "not found (web models only)"}`)
-  if (createdKey) console.log(`  created API key "${createdKey.name}": ${createdKey.key}`)
-  if (store.isDefaultPassword()) console.warn(`  panel password is still "admin"; change it in Settings`)
-  if (HOST === "0.0.0.0") console.warn(`  listening on all interfaces; put it behind TLS and a strong panel password`)
+  const ds = desktop?.current?.()
+  console.log(
+    `  desktop: ${
+      desktop ? (ds?.available ? ds.app.app || ds.app.binary : "not found (web models only)") : "disabled (set DOLA_HUB_DESKTOP=1 to enable)"
+    }`,
+  )
+  if (createdKey) console.log(`  created API key "${createdKey.name}" (view it in the panel)`)
+  if (store.isDefaultPassword()) console.warn(`  panel uses an explicit default password; change it in Settings`)
+  if (HOST === "0.0.0.0") console.warn(`  listening on all interfaces; keep it behind the configured TLS reverse proxy`)
 })
 
 function shutdown() {

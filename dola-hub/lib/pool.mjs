@@ -3,12 +3,14 @@
 // sessions) lives here; counters and the invalid flag are saved by the
 // store.
 
-export function createPool({ store, now = () => Date.now() } = {}) {
+export function createPool({ store, now = () => Date.now(), maxSticky = 10000 } = {}) {
   const inflight = new Map()
   const cooldown = new Map()
   const failStreak = new Map()
   const sticky = new Map()
   const weights = new Map()
+  const stickyLimit = Math.max(1, Number(maxSticky) || 10000)
+  let stickySweepAt = 0
 
   const settings = () => store.state.settings
   const accounts = () => store.state.accounts
@@ -48,11 +50,29 @@ export function createPool({ store, now = () => Date.now() } = {}) {
     return list[list.length - 1]
   }
 
+  function pruneSticky(at) {
+    for (const [key, entry] of sticky) if (entry.expires <= at) sticky.delete(key)
+    stickySweepAt = at
+  }
+
+  function rememberSticky(sessionKey, accountId, at) {
+    // Re-insert so the Map's insertion order is also the eviction order.
+    sticky.delete(sessionKey)
+    sticky.set(sessionKey, { accountId, expires: at + settings().stickyTtlSeconds * 1000 })
+    while (sticky.size > stickyLimit) {
+      const oldest = sticky.keys().next().value
+      if (oldest === undefined) break
+      sticky.delete(oldest)
+    }
+  }
+
   function pick({ sessionKey = "", exclude = new Set(), at = now() } = {}) {
     const list = eligible({ exclude, at })
     if (!list.length) return null
 
+    if (settings().stickyTtlSeconds <= 0) sticky.clear()
     if (sessionKey) {
+      if (at - stickySweepAt >= 60_000) pruneSticky(at)
       const s = sticky.get(sessionKey)
       if (s && s.expires > at) {
         const a = list.find((x) => x.id === s.accountId)
@@ -76,8 +96,7 @@ export function createPool({ store, now = () => Date.now() } = {}) {
       chosen = weightedPick(sorted)
     }
 
-    if (sessionKey && settings().stickyTtlSeconds > 0)
-      sticky.set(sessionKey, { accountId: chosen.id, expires: at + settings().stickyTtlSeconds * 1000 })
+    if (sessionKey && settings().stickyTtlSeconds > 0) rememberSticky(sessionKey, chosen.id, at)
     return chosen
   }
 
@@ -182,6 +201,7 @@ export function createPool({ store, now = () => Date.now() } = {}) {
     snapshot,
     activeCount,
     clearSticky,
+    stickyCount: () => sticky.size,
     eligible,
     inflightOf,
     cooldownOf,
